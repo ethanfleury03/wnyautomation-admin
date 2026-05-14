@@ -108,13 +108,13 @@ export function UserManagementTab() {
       const unassignedRes = await fetch('/api/admin/unassigned-users', { cache: 'no-store' });
       const json = await res.json();
       const unassignedJson = await unassignedRes.json();
-      if (!res.ok) throw new Error(json.error || 'Could not load tenants.');
+      if (!res.ok) throw new Error(json.error || 'Could not load portals.');
       setTenants(json.tenants || []);
       setPortalUsers(json.users || []);
       setSummary(json.summary || {});
       if (unassignedRes.ok) setUnassignedUsers(unassignedJson.users || []);
     } catch (err) {
-      setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Could not load tenants.' });
+      setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Could not load portals.' });
     } finally {
       setLoading(false);
     }
@@ -123,7 +123,7 @@ export function UserManagementTab() {
   async function assignUnassigned(email: string) {
     const form = assignForms[email];
     if (!form?.companyId) {
-      setNotice({ type: 'error', text: 'Choose a tenant before assigning this user.' });
+      setNotice({ type: 'error', text: 'Choose a portal before assigning this user.' });
       return;
     }
     setAssigning(email);
@@ -174,7 +174,7 @@ export function UserManagementTab() {
         body: JSON.stringify({ ...form, preset: form.industry }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Could not create tenant.');
+      if (!res.ok) throw new Error(json.error || 'Could not create portal.');
       setForm({
         name: '',
         email: '',
@@ -186,10 +186,10 @@ export function UserManagementTab() {
         modules: defaultModules,
       });
       setPanelOpen(false);
-      setNotice({ type: 'success', text: 'Tenant created.' });
+      setNotice({ type: 'success', text: 'Portal created.' });
       await load();
     } catch (err) {
-      setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Could not create tenant.' });
+      setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Could not create portal.' });
     } finally {
       setCreating(false);
     }
@@ -234,7 +234,7 @@ export function UserManagementTab() {
               onClick={() => setPanelOpen(true)}
               className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-3 py-2 text-sm font-semibold text-white hover:bg-orange-700"
             >
-              <Plus className="h-4 w-4" /> Create tenant
+              <Plus className="h-4 w-4" /> Create portal
             </button>
           </div>
         </div>
@@ -251,7 +251,7 @@ export function UserManagementTab() {
       ) : null}
 
       <section className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Metric icon={Settings2} label="Total tenants" value={Number(summary.total_tenants || tenants.length).toLocaleString()} />
+        <Metric icon={Settings2} label="Total portals" value={Number(summary.total_tenants || tenants.length).toLocaleString()} />
         <Metric icon={Users} label="Active users" value={Number(summary.active_users || 0).toLocaleString()} />
         <Metric icon={Activity} label="Audit events" value={Number(summary.recent_activity || 0).toLocaleString()} />
         <Metric icon={Settings2} label="Avg modules" value={averageModules.toFixed(1)} />
@@ -263,7 +263,7 @@ export function UserManagementTab() {
             <Search className="h-4 w-4 text-slate-400" />
             <input
               className="w-full text-sm outline-none"
-              placeholder="Search tenants by company or email"
+              placeholder="Search portals by company or email"
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
@@ -276,7 +276,7 @@ export function UserManagementTab() {
           <table className="w-full min-w-[880px] text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
               <tr>
-                <th className="px-4 py-3">Tenant</th>
+                <th className="px-4 py-3">Portal</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Industry</th>
                 <th className="px-4 py-3 text-right">Users</th>
@@ -322,7 +322,7 @@ export function UserManagementTab() {
               ) : (
                 <tr>
                   <td className="px-4 py-10 text-center text-sm text-slate-500" colSpan={8}>
-                    No tenants found. Create the first client CRM when ready.
+                    No portals found. Create the first client CRM when ready.
                   </td>
                 </tr>
               )}
@@ -346,7 +346,7 @@ export function UserManagementTab() {
             <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
               <tr>
                 <th className="px-4 py-3">User</th>
-                <th className="px-4 py-3">Tenant</th>
+                <th className="px-4 py-3">Portal</th>
                 <th className="px-4 py-3">Role</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Last Activity</th>
@@ -419,7 +419,7 @@ export function UserManagementTab() {
                     onChange={(e) => setAssignForms((forms) => ({ ...forms, [user.email]: { ...form, companyId: e.target.value } }))}
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   >
-                    <option value="">Choose tenant</option>
+                    <option value="">Choose portal</option>
                     {tenants.map((tenant) => (
                       <option key={tenant.id} value={tenant.id}>{tenant.display_name || tenant.name}</option>
                     ))}
@@ -455,7 +455,7 @@ export function UserManagementTab() {
           <div className="absolute right-0 top-0 h-full w-full max-w-2xl overflow-y-auto bg-white shadow-2xl">
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
               <div>
-                <h2 className="text-lg font-semibold text-slate-950">Create client CRM</h2>
+                <h2 className="text-lg font-semibold text-slate-950">Create client portal</h2>
                 <p className="text-sm text-slate-500">Set the starting modules, branding seed, and first admin.</p>
               </div>
               <button onClick={() => setPanelOpen(false)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100">
@@ -511,7 +511,7 @@ export function UserManagementTab() {
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
               >
                 {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                Create tenant
+                Create portal
               </button>
             </div>
           </div>

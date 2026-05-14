@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, ClipboardList, Server, Settings, Users } from 'lucide-react';
+import { SignOutButton } from '@clerk/nextjs';
+import { AlertCircle, ClipboardList, LogOut, Server, Settings, Users } from 'lucide-react';
 import { TicketsTab } from './_components/tickets-tab';
 import { UserManagementTab } from './_components/user-management-tab';
 
@@ -18,7 +19,7 @@ const sections = [
   {
     key: 'users',
     label: 'User management',
-    description: 'Tenants and access',
+    description: 'Portals and access',
     icon: Users,
   },
 ] as const;
@@ -31,14 +32,25 @@ export default function AdminHome() {
       <aside className="shrink-0 border-b border-[var(--ops-border-strong)] bg-[var(--ops-shell-gradient)] text-white lg:w-72 lg:border-b-0 lg:border-r">
         <div className="flex h-full flex-col">
           <div className="border-b border-white/10 p-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--ops-brand)]">
-                <Settings className="h-5 w-5" />
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--ops-brand)]">
+                  <Settings className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">Admin</p>
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">WNY operations</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-semibold text-white">Admin</p>
-                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">WNY operations</p>
-              </div>
+              <SignOutButton>
+                <button
+                  type="button"
+                  aria-label="Log out"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white lg:hidden"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </SignOutButton>
             </div>
           </div>
 
@@ -82,6 +94,14 @@ export default function AdminHome() {
               >
                 <AlertCircle className="h-4 w-4" /> Webhook failures
               </Link>
+              <SignOutButton>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-slate-300 hover:bg-white/6 hover:text-white"
+                >
+                  <LogOut className="h-4 w-4" /> Log out
+                </button>
+              </SignOutButton>
             </div>
           </div>
         </div>

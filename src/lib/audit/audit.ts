@@ -27,6 +27,7 @@ export type AuditAction =
   | 'tenant.update'
   | 'tenant.user.assign'
   | 'tenant.user.update'
+  | 'tenant.user.delete'
   | 'tenant.modules.update'
   | 'tenant.branding.update'
   | 'tenant.crm_config.update'

@@ -124,7 +124,7 @@ const tabs: { key: TabKey; label: string; icon: ComponentType<{ className?: stri
   { key: 'audit', label: 'Audit', icon: ClipboardList },
 ];
 
-const roles = ['admin', 'dispatcher', 'staff', 'tech', 'viewer'];
+const roles = ['super_admin', 'admin', 'dispatcher', 'staff', 'tech', 'viewer'];
 const entityTypes = ['lead', 'customer', 'job', 'estimate'];
 const fieldTypes = ['text', 'textarea', 'number', 'date', 'select', 'boolean', 'email', 'phone', 'url'];
 const moduleGroups = [

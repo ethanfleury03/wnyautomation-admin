@@ -3,8 +3,9 @@ import { sql } from '@/lib/db';
 import { isPortalResponse, requireSuperAdmin } from '@/lib/auth/tenant';
 import { auditFromRequest, writeAudit } from '@/lib/audit/audit';
 import type { UserRole } from '@/lib/auth/types';
+import { PORTAL_USER_ROLES } from '@/lib/admin/validation';
 
-const ALLOWED_ROLES: UserRole[] = ['admin', 'dispatcher', 'staff', 'tech', 'viewer'];
+const ALLOWED_ROLES: UserRole[] = PORTAL_USER_ROLES;
 
 export async function PATCH(
   request: Request,
@@ -20,6 +21,15 @@ export async function PATCH(
   if (role && !ALLOWED_ROLES.includes(role as UserRole)) {
     return NextResponse.json({ error: 'Choose a valid role.' }, { status: 400 });
   }
+  const existing = await sql`
+    SELECT u.id
+    FROM portal_users u
+    LEFT JOIN user_memberships m ON m.user_id = u.id AND m.company_id = ${id}
+    WHERE u.id = ${userId} AND (m.company_id = ${id} OR u.company_id = ${id})
+    LIMIT 1
+  `;
+  if (!existing[0]) return NextResponse.json({ error: 'User not found for this portal.' }, { status: 404 });
+
   await sql`
     UPDATE portal_users
     SET
@@ -27,7 +37,7 @@ export async function PATCH(
       name = COALESCE(${name}, name),
       is_active = COALESCE(${isActive}, is_active),
       updated_at = datetime('now')
-    WHERE id = ${userId} AND company_id = ${id}
+    WHERE id = ${userId}
   `;
   if (role) {
     await sql`

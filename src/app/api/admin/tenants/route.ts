@@ -24,14 +24,14 @@ export async function GET(request: Request) {
       s.industry,
       s.portal_title,
       c.stripe_connect_status,
-      (SELECT COUNT(*) FROM portal_users WHERE company_id = c.id) AS user_count,
+      (SELECT COUNT(DISTINCT user_id) FROM user_memberships WHERE company_id = c.id AND status = 'active') AS user_count,
       (SELECT COUNT(*) FROM feature_flags WHERE company_id = c.id AND flag_key LIKE 'module.%' AND enabled = true) AS enabled_module_count,
       (SELECT COUNT(*) FROM invoices WHERE company_id = c.id) AS invoice_count,
       (SELECT COALESCE(SUM(amount_cents), 0) FROM payments WHERE company_id = c.id AND status = 'paid') AS paid_cents,
       (SELECT MAX(created_at) FROM audit_logs WHERE company_id = c.id) AS last_activity_at,
       (SELECT COUNT(*) FROM audit_logs WHERE company_id = c.id) AS audit_event_count,
       (SELECT MAX(created_at) FROM leads WHERE company_id = c.id) AS last_lead_at,
-      (SELECT MAX(updated_at) FROM portal_users WHERE company_id = c.id) AS last_user_activity_at
+      (SELECT MAX(updated_at) FROM user_memberships WHERE company_id = c.id) AS last_user_activity_at
     FROM companies c
     LEFT JOIN company_settings s ON s.company_id = c.id
     WHERE ${q === '%%'} OR lower(c.name) LIKE ${q} OR lower(c.email) LIKE ${q}
@@ -42,19 +42,29 @@ export async function GET(request: Request) {
       u.id,
       u.email,
       u.name,
-      u.role,
-      u.is_active,
-      u.company_id,
+      u.role AS account_role,
+      u.is_active AS account_is_active,
+      u.company_id AS legacy_company_id,
       u.clerk_user_id,
       u.created_at,
       u.updated_at,
+      m.id AS membership_id,
+      COALESCE(m.company_id, u.company_id) AS company_id,
+      COALESCE(m.role, u.role) AS role,
+      COALESCE(m.status, CASE WHEN u.is_active = true THEN 'active' ELSE 'inactive' END) AS membership_status,
+      CASE
+        WHEN u.is_active = false THEN false
+        WHEN m.status IS NULL THEN u.is_active
+        ELSE m.status = 'active'
+      END AS is_active,
       c.name AS company_name,
       s.display_name AS company_display_name
     FROM portal_users u
-    LEFT JOIN companies c ON c.id = u.company_id
-    LEFT JOIN company_settings s ON s.company_id = u.company_id
-    WHERE ${q === '%%'} OR lower(u.name) LIKE ${q} OR lower(u.email) LIKE ${q} OR lower(c.name) LIKE ${q}
-    ORDER BY u.updated_at DESC, u.created_at DESC
+    LEFT JOIN user_memberships m ON m.user_id = u.id
+    LEFT JOIN companies c ON c.id = COALESCE(m.company_id, u.company_id)
+    LEFT JOIN company_settings s ON s.company_id = COALESCE(m.company_id, u.company_id)
+    WHERE ${q === '%%'} OR lower(u.name) LIKE ${q} OR lower(u.email) LIKE ${q} OR lower(c.name) LIKE ${q} OR lower(s.display_name) LIKE ${q}
+    ORDER BY lower(COALESCE(s.display_name, c.name, '')), lower(u.email)
     LIMIT 100
   `;
   const summaryRows = await sql`

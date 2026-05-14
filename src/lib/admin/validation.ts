@@ -1,6 +1,7 @@
 import type { UserRole } from '@/lib/auth/types';
 import { MODULE_CATALOG, type ModuleKey } from '@/lib/modules/catalog';
 
+export const PORTAL_USER_ROLES: UserRole[] = ['super_admin', 'admin', 'dispatcher', 'staff', 'tech', 'viewer'];
 export const ADMIN_ASSIGNABLE_ROLES: UserRole[] = ['admin', 'dispatcher', 'staff', 'tech', 'viewer'];
 export const CRM_ENTITY_TYPES = ['lead', 'customer', 'job', 'estimate'] as const;
 export const CRM_FIELD_TYPES = ['text', 'textarea', 'number', 'date', 'select', 'boolean', 'email', 'phone', 'url'] as const;
@@ -11,6 +12,10 @@ export function isValidEmail(value: string): boolean {
 
 export function isAssignableRole(value: string): value is UserRole {
   return ADMIN_ASSIGNABLE_ROLES.includes(value as UserRole);
+}
+
+export function isPortalUserRole(value: string): value is UserRole {
+  return PORTAL_USER_ROLES.includes(value as UserRole);
 }
 
 export function isModuleKey(value: string): value is ModuleKey {

@@ -3,8 +3,9 @@ import { sql } from '@/lib/db';
 import { isPortalResponse, requireSuperAdmin } from '@/lib/auth/tenant';
 import { auditFromRequest, writeAudit } from '@/lib/audit/audit';
 import type { UserRole } from '@/lib/auth/types';
+import { PORTAL_USER_ROLES } from '@/lib/admin/validation';
 
-const ALLOWED_ROLES: UserRole[] = ['admin', 'dispatcher', 'staff', 'tech', 'viewer'];
+const ALLOWED_ROLES: UserRole[] = PORTAL_USER_ROLES;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -12,10 +13,23 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (isPortalResponse(auth)) return auth;
   const { id } = await params;
   const users = await sql`
-    SELECT id, email, name, role, is_active, clerk_user_id, created_at, updated_at
-    FROM portal_users
-    WHERE company_id = ${id}
-    ORDER BY lower(email)
+    SELECT
+      u.id,
+      u.email,
+      u.name,
+      COALESCE(m.role, u.role) AS role,
+      CASE
+        WHEN u.is_active = false THEN false
+        WHEN m.status IS NULL THEN u.is_active
+        ELSE m.status = 'active'
+      END AS is_active,
+      u.clerk_user_id,
+      u.created_at,
+      COALESCE(m.updated_at, u.updated_at) AS updated_at
+    FROM portal_users u
+    LEFT JOIN user_memberships m ON m.user_id = u.id AND m.company_id = ${id}
+    WHERE m.company_id = ${id} OR (u.company_id = ${id} AND m.id IS NULL)
+    ORDER BY lower(u.email)
   `;
   return NextResponse.json({ users });
 }
@@ -62,6 +76,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     await sql`
       INSERT INTO user_memberships (user_id, company_id, branch_id, role, status)
       VALUES (${userId}, ${id}, ${branchId}, ${role}, 'active')
+      ON CONFLICT (user_id, company_id) DO UPDATE SET
+        branch_id = excluded.branch_id,
+        role = excluded.role,
+        status = excluded.status,
+        updated_at = datetime('now')
     `;
   }
 

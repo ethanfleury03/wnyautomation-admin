@@ -3,8 +3,9 @@ import { sql } from '@/lib/db';
 import { isPortalResponse, requireSuperAdmin } from '@/lib/auth/tenant';
 import { auditFromRequest, writeAudit } from '@/lib/audit/audit';
 import type { UserRole } from '@/lib/auth/types';
+import { PORTAL_USER_ROLES } from '@/lib/admin/validation';
 
-const ALLOWED_ROLES: UserRole[] = ['admin', 'dispatcher', 'staff', 'tech', 'viewer'];
+const ALLOWED_ROLES: UserRole[] = PORTAL_USER_ROLES;
 
 export async function POST(
   request: Request,
@@ -68,6 +69,10 @@ export async function POST(
     await sql`
       INSERT INTO user_memberships (user_id, company_id, role, status)
       VALUES (${userId}, ${companyId}, ${role}, 'active')
+      ON CONFLICT (user_id, company_id) DO UPDATE SET
+        role = excluded.role,
+        status = excluded.status,
+        updated_at = datetime('now')
     `;
   }
   await sql`

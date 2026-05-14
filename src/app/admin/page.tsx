@@ -6,6 +6,7 @@ import { SignOutButton } from '@clerk/nextjs';
 import { AlertCircle, ClipboardList, LogOut, Server, Settings, Users } from 'lucide-react';
 import { TicketsTab } from './_components/tickets-tab';
 import { UserManagementTab } from './_components/user-management-tab';
+import { getClientPortalUrl } from '@/lib/portal-url';
 
 type AdminSection = 'tickets' | 'users';
 
@@ -26,6 +27,7 @@ const sections = [
 
 export default function AdminHome() {
   const [section, setSection] = useState<AdminSection>('tickets');
+  const clientPortalUrl = getClientPortalUrl();
 
   return (
     <div className="flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[var(--ops-bg)] lg:flex-row">
@@ -42,7 +44,7 @@ export default function AdminHome() {
                   <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">WNY operations</p>
                 </div>
               </div>
-              <SignOutButton>
+              <SignOutButton redirectUrl={clientPortalUrl}>
                 <button
                   type="button"
                   aria-label="Log out"
@@ -94,7 +96,7 @@ export default function AdminHome() {
               >
                 <AlertCircle className="h-4 w-4" /> Webhook failures
               </Link>
-              <SignOutButton>
+              <SignOutButton redirectUrl={clientPortalUrl}>
                 <button
                   type="button"
                   className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-slate-300 hover:bg-white/6 hover:text-white"

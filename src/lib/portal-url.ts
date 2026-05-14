@@ -1,4 +1,4 @@
-const DEFAULT_CLIENT_LOGIN_URL = 'https://awp.wnyautomation.com/sign-in?redirect_url=/app';
+const DEFAULT_CLIENT_LOGIN_URL = 'https://app.wnyautomation.com/sign-in?redirect_url=/launch';
 
 function normalizePublicUrl(value: string | undefined): string | null {
   const trimmed = value?.trim();

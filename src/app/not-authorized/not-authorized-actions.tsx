@@ -4,17 +4,17 @@ import { SignOutButton } from '@clerk/nextjs';
 import { LogOut } from 'lucide-react';
 
 type NotAuthorizedActionsProps = {
-  clientPortalUrl: string;
+  clientLoginUrl: string;
 };
 
-export function NotAuthorizedActions({ clientPortalUrl }: NotAuthorizedActionsProps) {
+export function NotAuthorizedActions({ clientLoginUrl }: NotAuthorizedActionsProps) {
   return (
     <div className="mt-6 flex flex-col gap-3 sm:flex-row">
       <a
-        href={clientPortalUrl}
+        href={clientLoginUrl}
         className="inline-flex items-center justify-center rounded-lg bg-[var(--ops-brand)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--ops-brand-strong)]"
       >
-        Go to client portal
+        Go to client login
       </a>
       <SignOutButton redirectUrl="/sign-in">
         <button

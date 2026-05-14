@@ -1,4 +1,4 @@
-const DEFAULT_CLIENT_PORTAL_URL = 'https://app.wnyautomation.com';
+const DEFAULT_CLIENT_LOGIN_URL = 'https://awp.wnyautomation.com/sign-in?redirect_url=/app';
 
 function normalizePublicUrl(value: string | undefined): string | null {
   const trimmed = value?.trim();
@@ -17,9 +17,8 @@ function normalizePublicUrl(value: string | undefined): string | null {
 
 export function getClientPortalUrl(): string {
   return (
-    normalizePublicUrl(process.env.NEXT_PUBLIC_CLIENT_PORTAL_URL) ||
-    normalizePublicUrl(process.env.NEXT_PUBLIC_PORTAL_GATEWAY_URL) ||
-    normalizePublicUrl(process.env.NEXT_PUBLIC_GATEWAY_URL) ||
-    DEFAULT_CLIENT_PORTAL_URL
+    normalizePublicUrl(process.env.NEXT_PUBLIC_CLIENT_LOGIN_URL) ||
+    normalizePublicUrl(process.env.NEXT_PUBLIC_AWP_PORTAL_SIGN_IN_URL) ||
+    DEFAULT_CLIENT_LOGIN_URL
   );
 }

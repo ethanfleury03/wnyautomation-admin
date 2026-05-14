@@ -48,6 +48,18 @@ vercel link --yes --scope wny-automation --project wnyautomation-portal
 
 Keep `.vercel/` ignored. Never commit Vercel project metadata.
 
+If a Git-triggered gateway preview remains in Vercel's `UNKNOWN` state with no
+build logs, deploy it manually from the `staging` branch and re-point the branch
+alias:
+
+```bash
+cd /Users/ethanfleury/projects/wnyautomation-portal-gateway
+vercel --scope wny-automation --yes
+vercel alias set <ready-preview-url> \
+  wnyautomation-portal-gateway-git-staging-wny-automation.vercel.app \
+  --scope wny-automation
+```
+
 ## Staging Environment Variables
 
 Each repo has a `.env.staging.example`. Copy its values into Vercel Preview

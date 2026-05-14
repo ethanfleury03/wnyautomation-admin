@@ -18,7 +18,7 @@ const clerkLocalization = {
   },
 } as const;
 
-const clerkProxyUrl = '/clerk-proxy';
+const clerkProxyUrl = 'https://wnyautomation.com/clerk-proxy';
 
 const appSans = Manrope({
   variable: '--font-app-sans',

@@ -1,10 +1,9 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
+import type { NextFetchEvent, NextRequest } from 'next/server';
 
-const clerkFrontendApiProxy = {
-  enabled: true,
-  path: '/clerk-proxy',
-} as const;
+const clerkProxyPath = '/clerk-proxy';
+const clerkProxyUrl = 'https://wnyautomation.com/clerk-proxy';
 
 const isPublicRoute = createRouteMatcher([
   '/',
@@ -21,7 +20,15 @@ const isPublicRoute = createRouteMatcher([
 
 const isProtectedRoute = createRouteMatcher(['/admin(.*)', '/api/admin(.*)']);
 
-export default clerkMiddleware(
+function getPrimaryClerkProxyUrl(req: NextRequest) {
+  const url = new URL(clerkProxyUrl);
+  const basePath = url.pathname.endsWith('/') ? url.pathname.slice(0, -1) : url.pathname;
+  url.pathname = `${basePath}${req.nextUrl.pathname.slice(clerkProxyPath.length)}`;
+  url.search = req.nextUrl.search;
+  return url;
+}
+
+const clerkAuthMiddleware = clerkMiddleware(
   async (auth, req) => {
     if (isPublicRoute(req)) {
       return NextResponse.next();
@@ -43,9 +50,17 @@ export default clerkMiddleware(
     return NextResponse.next();
   },
   {
-    frontendApiProxy: clerkFrontendApiProxy,
+    proxyUrl: clerkProxyUrl,
   },
 );
+
+export default function proxy(req: NextRequest, event: NextFetchEvent) {
+  if (req.nextUrl.pathname === clerkProxyPath || req.nextUrl.pathname.startsWith(`${clerkProxyPath}/`)) {
+    return NextResponse.redirect(getPrimaryClerkProxyUrl(req), 307);
+  }
+
+  return clerkAuthMiddleware(req, event);
+}
 
 export const config = {
   matcher: [

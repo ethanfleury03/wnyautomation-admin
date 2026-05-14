@@ -18,6 +18,8 @@ const clerkLocalization = {
   },
 } as const;
 
+const clerkProxyUrl = '/clerk-proxy';
+
 const appSans = Manrope({
   variable: '--font-app-sans',
   subsets: ['latin'],
@@ -55,6 +57,7 @@ export default function RootLayout({
           signUpUrl="/sign-in"
           afterSignOutUrl="/sign-in"
           localization={clerkLocalization}
+          proxyUrl={clerkProxyUrl}
         >
           {children}
         </ClerkProvider>

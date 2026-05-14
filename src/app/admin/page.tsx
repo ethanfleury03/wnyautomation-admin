@@ -27,7 +27,7 @@ export default function AdminHome() {
   const [section, setSection] = useState<AdminSection>('tickets');
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[var(--ops-bg)] lg:flex-row">
+    <div className="flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[var(--ops-bg)] lg:flex-row">
       <aside className="shrink-0 border-b border-[var(--ops-border-strong)] bg-[var(--ops-shell-gradient)] text-white lg:w-72 lg:border-b-0 lg:border-r">
         <div className="flex h-full flex-col">
           <div className="border-b border-white/10 p-5">

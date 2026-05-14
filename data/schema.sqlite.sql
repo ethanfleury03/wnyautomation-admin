@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS companies (
   id TEXT PRIMARY KEY DEFAULT (uuid()) NOT NULL,
   name TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'active',
   phone TEXT,
   address TEXT,
   stripe_customer_id TEXT,

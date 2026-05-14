@@ -2,16 +2,18 @@ import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { isPortalResponse, requireSuperAdmin } from '@/lib/auth/tenant';
 import { configuredChecks, missingConfiguredChecks } from '@/lib/health/checks';
+import { getDatabaseInfo } from '@/lib/health/db-info';
 
 export async function GET() {
   const auth = await requireSuperAdmin();
   if (isPortalResponse(auth)) return auth;
   const started = Date.now();
-  const [dbRows, webhookFailures, unassignedUsers, auditEvents] = await Promise.all([
+  const [dbRows, webhookFailures, unassignedUsers, auditEvents, database] = await Promise.all([
     sql`SELECT 1 AS one`,
     sql`SELECT COUNT(*) AS count FROM webhook_failures WHERE status != 'resolved'`,
     sql`SELECT COUNT(*) AS count FROM unassigned_portal_users WHERE assigned_at IS NULL`,
     sql`SELECT COUNT(*) AS count FROM audit_logs`,
+    getDatabaseInfo(),
   ]);
   return NextResponse.json({
     ok: dbRows.length === 1,
@@ -24,6 +26,7 @@ export async function GET() {
       unassignedUsers: Number(unassignedUsers[0]?.count || 0),
       auditEvents: Number(auditEvents[0]?.count || 0),
     },
+    database,
     lastDatabaseQueryAt: new Date().toISOString(),
   });
 }

@@ -17,6 +17,7 @@ import path from 'path';
 import { applyAuthMigrations } from '@/lib/auth/sqlite-auth-migrate';
 import { applyPaymentsMigrations } from '@/lib/payments/sqlite-payments-migrate';
 import { applyAdminTicketMigrations } from '@/lib/admin/sqlite-admin-ticket-migrate';
+import { applySharedDbMigrations } from '@/lib/platform/sqlite-shared-db-migrate';
 
 type PgPoolType = import('@neondatabase/serverless').Pool;
 
@@ -188,6 +189,7 @@ export function getDb(): Database.Database {
   applyAuthMigrations(dbInstance);
   applyPaymentsMigrations(dbInstance);
   applyAdminTicketMigrations(dbInstance);
+  applySharedDbMigrations(dbInstance);
 
   return dbInstance;
 }
@@ -219,10 +221,21 @@ export class SqlQuery implements PromiseLike<Record<string, unknown>[]> {
     const args = flat.args;
 
     const pool = getPgPool();
-    const res = await pool.query(text, args as unknown[]);
-    // Neon's query returns rows for anything returning; INSERT without
-    // RETURNING resolves with rows=[].
-    return (res.rows as Record<string, unknown>[]) || [];
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`SET LOCAL app.role = 'super_admin'`);
+      const res = await client.query(text, args as unknown[]);
+      await client.query('COMMIT');
+      // Neon's query returns rows for anything returning; INSERT without
+      // RETURNING resolves with rows=[].
+      return (res.rows as Record<string, unknown>[]) || [];
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   then<TResult1 = Record<string, unknown>[], TResult2 = never>(

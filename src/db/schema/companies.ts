@@ -5,6 +5,7 @@ export const companies = pgTable('companies', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: text('name').notNull(),
   email: text('email').notNull().unique(),
+  status: text('status').notNull().default('active'),
   phone: text('phone'),
   address: text('address'),
   stripeCustomerId: text('stripe_customer_id'),
@@ -191,6 +192,30 @@ export const featureFlags = pgTable(
   },
   (t) => ({
     companyKeyIdx: uniqueIndex('idx_feature_flags_company_key').on(t.companyId, t.flagKey),
+  }),
+);
+
+export const portalDestinations = pgTable(
+  'portal_destinations',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    companyId: uuid('company_id')
+      .notNull()
+      .references(() => companies.id, { onDelete: 'cascade' }),
+    destinationKey: text('destination_key').notNull().unique(),
+    label: text('label').notNull(),
+    launchUrl: text('launch_url').notNull(),
+    isDefault: boolean('is_default').notNull().default(false),
+    status: text('status').notNull().default('active'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    companyIdx: index('idx_portal_destinations_company').on(t.companyId),
+    statusIdx: index('idx_portal_destinations_status').on(t.status),
+    defaultPerCompany: uniqueIndex('idx_portal_destinations_company_default')
+      .on(t.companyId)
+      .where(sql`is_default = true`),
   }),
 );
 

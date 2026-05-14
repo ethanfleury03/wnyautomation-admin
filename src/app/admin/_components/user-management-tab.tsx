@@ -41,6 +41,20 @@ type UnassignedUser = {
   last_seen_at: string;
 };
 
+type PortalUser = {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  is_active: boolean;
+  company_id: string | null;
+  company_name: string | null;
+  company_display_name: string | null;
+  clerk_user_id: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
 const defaultModules = MODULE_CATALOG.filter((m) => m.defaultEnabled).map((m) => m.key);
 
 function fmtMoney(cents: number | null | undefined) {
@@ -57,6 +71,7 @@ function validEmail(value: string) {
 
 export function UserManagementTab() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [portalUsers, setPortalUsers] = useState<PortalUser[]>([]);
   const [unassignedUsers, setUnassignedUsers] = useState<UnassignedUser[]>([]);
   const [summary, setSummary] = useState<Summary>({});
   const [loading, setLoading] = useState(true);
@@ -95,6 +110,7 @@ export function UserManagementTab() {
       const unassignedJson = await unassignedRes.json();
       if (!res.ok) throw new Error(json.error || 'Could not load tenants.');
       setTenants(json.tenants || []);
+      setPortalUsers(json.users || []);
       setSummary(json.summary || {});
       if (unassignedRes.ok) setUnassignedUsers(unassignedJson.users || []);
     } catch (err) {
@@ -194,8 +210,8 @@ export function UserManagementTab() {
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-slate-50 p-4 lg:p-6">
-      <header className="sticky top-0 z-20 -mx-4 -mt-4 border-b border-slate-200 bg-slate-50/95 px-4 py-4 backdrop-blur lg:-mx-6 lg:-mt-6 lg:px-6">
+    <div className="h-full min-w-0 overflow-y-auto bg-slate-50 px-4 py-5 lg:px-6 lg:py-6">
+      <header className="border-b border-slate-200 pb-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-slate-950">User management</h1>
@@ -307,6 +323,71 @@ export function UserManagementTab() {
                 <tr>
                   <td className="px-4 py-10 text-center text-sm text-slate-500" colSpan={8}>
                     No tenants found. Create the first client CRM when ready.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="mt-5 rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-2 border-b border-slate-200 p-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Portal users</h2>
+            <p className="mt-1 text-sm text-slate-600">Assigned users pulled from the client portal database.</p>
+          </div>
+          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
+            {portalUsers.length}
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+              <tr>
+                <th className="px-4 py-3">User</th>
+                <th className="px-4 py-3">Tenant</th>
+                <th className="px-4 py-3">Role</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Last Activity</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && !portalUsers.length ? (
+                Array.from({ length: 3 }).map((_, idx) => (
+                  <tr key={idx} className="border-t border-slate-100">
+                    <td className="px-4 py-4" colSpan={5}>
+                      <div className="h-8 animate-pulse rounded bg-slate-100" />
+                    </td>
+                  </tr>
+                ))
+              ) : portalUsers.length ? (
+                portalUsers.map((user) => (
+                  <tr key={user.id} className="border-t border-slate-100 hover:bg-slate-50/70">
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-slate-950">{user.name || user.email}</div>
+                      <div className="text-xs text-slate-500">{user.email}</div>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {user.company_display_name || user.company_name || 'Unassigned'}
+                    </td>
+                    <td className="px-4 py-3 capitalize text-slate-600">{user.role || 'staff'}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`rounded-full px-2 py-1 text-xs font-medium ${
+                          user.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {user.is_active ? 'active' : 'inactive'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-500">{fmtDate(user.updated_at || user.created_at)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="px-4 py-10 text-center text-sm text-slate-500" colSpan={5}>
+                    No portal users found.
                   </td>
                 </tr>
               )}

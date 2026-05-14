@@ -37,6 +37,26 @@ export async function GET(request: Request) {
     WHERE ${q === '%%'} OR lower(c.name) LIKE ${q} OR lower(c.email) LIKE ${q}
     ORDER BY c.created_at DESC
   `;
+  const users = await sql`
+    SELECT
+      u.id,
+      u.email,
+      u.name,
+      u.role,
+      u.is_active,
+      u.company_id,
+      u.clerk_user_id,
+      u.created_at,
+      u.updated_at,
+      c.name AS company_name,
+      s.display_name AS company_display_name
+    FROM portal_users u
+    LEFT JOIN companies c ON c.id = u.company_id
+    LEFT JOIN company_settings s ON s.company_id = u.company_id
+    WHERE ${q === '%%'} OR lower(u.name) LIKE ${q} OR lower(u.email) LIKE ${q} OR lower(c.name) LIKE ${q}
+    ORDER BY u.updated_at DESC, u.created_at DESC
+    LIMIT 100
+  `;
   const summaryRows = await sql`
     SELECT
       (SELECT COUNT(*) FROM companies) AS total_tenants,
@@ -49,7 +69,7 @@ export async function GET(request: Request) {
         GROUP BY company_id
       ) m) AS average_enabled_modules
   `;
-  return NextResponse.json({ tenants, summary: summaryRows[0] ?? {} });
+  return NextResponse.json({ tenants, users, summary: summaryRows[0] ?? {} });
 }
 
 export async function POST(request: Request) {

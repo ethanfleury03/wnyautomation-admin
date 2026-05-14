@@ -18,7 +18,11 @@ const EXPECTED_TABLES = [
 ];
 
 const RLS_AUDIT_TABLES = [
+  'portal_users',
   'user_memberships',
+  'portal_destinations',
+  'company_settings',
+  'branches',
   'audit_logs',
   'feature_flags',
   'customers',

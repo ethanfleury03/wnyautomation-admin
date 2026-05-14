@@ -11,6 +11,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "db:contract": "node scripts/verify-shared-db-contract.mjs",
+    "db:merge-gateway-routing": "node scripts/merge-gateway-routing-data.mjs",
+    "db:verify-production-hardening": "node scripts/verify-production-db-hardening.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
   },

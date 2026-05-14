@@ -18,6 +18,7 @@ const checks = [
   ['company_settings', /CREATE TABLE(?: IF NOT EXISTS)? "company_settings"/],
   ['feature_flags', /CREATE TABLE "feature_flags"/],
   ['portal_destinations', /CREATE TABLE IF NOT EXISTS "portal_destinations"/],
+  ['portal_destinations RLS', /portal_destinations[\s\S]*ROW LEVEL SECURITY|column_name = 'company_id'/],
   ['unassigned_portal_users', /CREATE TABLE IF NOT EXISTS "unassigned_portal_users"/],
   ['admin_ticket_buckets', /CREATE TABLE IF NOT EXISTS "admin_ticket_buckets"/],
   ['admin_tickets', /CREATE TABLE IF NOT EXISTS "admin_tickets"/],
@@ -26,6 +27,8 @@ const checks = [
   ['crm_sync_runs', /CREATE TABLE IF NOT EXISTS "crm_sync_runs"/],
   ['admin_audit_events', /CREATE TABLE IF NOT EXISTS "admin_audit_events"/],
   ['RLS helper app_is_super_admin', /CREATE OR REPLACE FUNCTION app_is_super_admin/],
+  ['RLS helper app_current_company', /CREATE OR REPLACE FUNCTION app_current_company/],
+  ['RLS forced', /FORCE ROW LEVEL SECURITY/],
 ];
 
 const failures = checks.filter(([, pattern]) => !pattern.test(migrations));

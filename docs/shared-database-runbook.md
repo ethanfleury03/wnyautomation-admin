@@ -26,14 +26,29 @@ Keep preview/staging branches separate later. This milestone only standardizes p
 
 ## Verification After Env Changes
 
-1. Apply migrations from `wnyautomation-admin`.
-2. Deploy admin, gateway, and AWP.
-3. Compare the non-secret `connectionFingerprint` from:
+1. Create a Neon branch/snapshot from the current AWP production database and take a `pg_dump` backup.
+2. Apply migrations from `wnyautomation-admin` to the cloned branch first.
+3. Dry-run the gateway routing merge:
+
+```bash
+GATEWAY_DATABASE_URL="..." CANONICAL_DATABASE_URL="..." npm run db:merge-gateway-routing
+```
+
+4. If the dry run has no conflicts, run it with `--apply` against the clone and verify row counts.
+5. During the manual cutover window, repeat the backup, apply migrations to production, then run:
+
+```bash
+GATEWAY_DATABASE_URL="..." CANONICAL_DATABASE_URL="..." npm run db:merge-gateway-routing -- --apply
+npm run db:verify-production-hardening
+```
+
+6. Deploy admin, gateway, and AWP with production `DATABASE_URL` / `DATABASE_DIRECT_URL` pointed at the canonical AWP database.
+7. Compare the non-secret `connectionFingerprint` from:
    - Admin: `GET /api/admin/system-health` as a super admin.
    - Gateway: `GET /api/internal/db-info` with `GATEWAY_INTERNAL_ACCESS_TOKEN`.
    - AWP: `GET /api/internal/db-info` with `PORTAL_GATEWAY_SERVICE_TOKEN` or `WNY_INTERNAL_STATUS_TOKEN`.
-4. Confirm all expected shared tables show `exists: true`.
-5. Confirm existing users appear in admin user management and gateway `/api/internal/access/verify` still resolves assigned users.
+8. Confirm all expected shared tables show `exists: true`.
+9. Confirm existing users appear in admin user management and gateway `/api/internal/access/verify` still resolves assigned users.
 
 ## RLS And App Authorization Audit
 
@@ -47,8 +62,10 @@ Current app-level checks:
 Current DB-level notes:
 
 - Existing RLS policies are installed by `drizzle/0001_rls.sql` for many tenant-owned tables.
+- `drizzle/0012_shared_rls_hardening.sql` repairs/enforces RLS across all tables with `company_id`, plus parent-scoped child tables.
 - Admin and gateway set `app.role = 'super_admin'` for server-side operational queries.
-- Dedicated production DB roles and fuller policy coverage for every shared table are deferred to the 9/10 hardening phase.
+- AWP authenticated portal requests set `app.company_id` through the SQL runtime context after resolving an active membership and destination.
+- Dedicated production DB roles are deferred to the next hardening phase.
 
 ## Local Checks
 

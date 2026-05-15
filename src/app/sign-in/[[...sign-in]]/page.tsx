@@ -19,11 +19,13 @@ export default async function SignInPage({
   searchParams: Promise<RedirectSearchParams>;
 }) {
   const [{ userId }, sp] = await Promise.all([auth(), searchParams]);
-  if (userId) redirect(getSafeRedirectPath(sp));
+  const redirectTo = getSafeRedirectPath(sp);
+
+  if (userId) redirect(redirectTo);
 
   return (
     <Suspense fallback={<SignInFallback />}>
-      <SignInClient />
+      <SignInClient redirectTo={redirectTo} />
     </Suspense>
   );
 }

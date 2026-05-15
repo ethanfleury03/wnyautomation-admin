@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { ClerkProvider } from '@clerk/nextjs';
 import { IBM_Plex_Mono, Manrope } from 'next/font/google';
+import { getClerkProxyUrl } from '@/lib/clerk-proxy-config';
 import { getClientPortalUrl } from '@/lib/portal-url';
 import './globals.css';
 
@@ -18,16 +19,6 @@ const clerkLocalization = {
     },
   },
 } as const;
-
-const defaultProductionClerkProxyUrl = 'https://wnyautomation.com/clerk-proxy';
-
-function getClerkProxyUrl() {
-  return (
-    process.env.NEXT_PUBLIC_CLERK_PROXY_URL ||
-    process.env.CLERK_PROXY_URL ||
-    (process.env.NODE_ENV === 'production' ? defaultProductionClerkProxyUrl : undefined)
-  );
-}
 
 const appSans = Manrope({
   variable: '--font-app-sans',

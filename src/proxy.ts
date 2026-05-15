@@ -1,17 +1,7 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { NextFetchEvent, NextRequest } from 'next/server';
-
-const clerkProxyPath = '/clerk-proxy';
-const defaultProductionClerkProxyUrl = 'https://wnyautomation.com/clerk-proxy';
-
-function getClerkProxyUrl() {
-  return (
-    process.env.NEXT_PUBLIC_CLERK_PROXY_URL ||
-    process.env.CLERK_PROXY_URL ||
-    (process.env.NODE_ENV === 'production' ? defaultProductionClerkProxyUrl : undefined)
-  );
-}
+import { getClerkProxyUrl } from '@/lib/clerk-proxy-config';
 
 const isPublicRoute = createRouteMatcher([
   '/',
@@ -19,6 +9,7 @@ const isPublicRoute = createRouteMatcher([
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/not-authorized(.*)',
+  '/clerk-proxy(.*)',
   '/favicon.ico',
   '/icon.svg',
   '/apple-icon',
@@ -27,16 +18,6 @@ const isPublicRoute = createRouteMatcher([
 ]);
 
 const isProtectedRoute = createRouteMatcher(['/admin(.*)', '/api/admin(.*)']);
-
-function getPrimaryClerkProxyUrl(req: NextRequest) {
-  const clerkProxyUrl = getClerkProxyUrl();
-  if (!clerkProxyUrl) return null;
-  const url = new URL(clerkProxyUrl);
-  const basePath = url.pathname.endsWith('/') ? url.pathname.slice(0, -1) : url.pathname;
-  url.pathname = `${basePath}${req.nextUrl.pathname.slice(clerkProxyPath.length)}`;
-  url.search = req.nextUrl.search;
-  return url;
-}
 
 const clerkAuthMiddleware = clerkMiddleware(
   async (auth, req) => {
@@ -63,11 +44,6 @@ const clerkAuthMiddleware = clerkMiddleware(
 );
 
 export default function proxy(req: NextRequest, event: NextFetchEvent) {
-  if (req.nextUrl.pathname === clerkProxyPath || req.nextUrl.pathname.startsWith(`${clerkProxyPath}/`)) {
-    const proxyUrl = getPrimaryClerkProxyUrl(req);
-    if (proxyUrl) return NextResponse.redirect(proxyUrl, 307);
-  }
-
   return clerkAuthMiddleware(req, event);
 }
 

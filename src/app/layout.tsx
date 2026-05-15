@@ -19,7 +19,15 @@ const clerkLocalization = {
   },
 } as const;
 
-const clerkProxyUrl = 'https://wnyautomation.com/clerk-proxy';
+const defaultProductionClerkProxyUrl = 'https://wnyautomation.com/clerk-proxy';
+
+function getClerkProxyUrl() {
+  return (
+    process.env.NEXT_PUBLIC_CLERK_PROXY_URL ||
+    process.env.CLERK_PROXY_URL ||
+    (process.env.NODE_ENV === 'production' ? defaultProductionClerkProxyUrl : undefined)
+  );
+}
 
 const appSans = Manrope({
   variable: '--font-app-sans',
@@ -51,6 +59,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const clientPortalUrl = getClientPortalUrl();
+  const clerkProxyUrl = getClerkProxyUrl();
 
   return (
     <html lang="en">
@@ -60,7 +69,7 @@ export default function RootLayout({
           signUpUrl="/sign-in"
           afterSignOutUrl={clientPortalUrl}
           localization={clerkLocalization}
-          proxyUrl={clerkProxyUrl}
+          {...(clerkProxyUrl ? { proxyUrl: clerkProxyUrl } : {})}
         >
           {children}
         </ClerkProvider>

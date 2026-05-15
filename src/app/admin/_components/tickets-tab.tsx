@@ -14,16 +14,25 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   AlertCircle,
+  BarChart3,
   CalendarClock,
   Check,
+  CircleCheck,
+  Files,
   GripVertical,
+  Hand,
   Loader2,
+  MessageSquareText,
+  MoveRight,
   Pencil,
   Plus,
   RefreshCw,
   Search,
+  Send,
+  TriangleAlert,
   Trash2,
   X,
+  type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/ops';
 
@@ -53,6 +62,8 @@ type Project = {
 type Ticket = {
   id: string;
   bucket_id: string;
+  bucket_name: string;
+  bucket_color: string;
   company_id: string;
   project_id: string | null;
   title: string;
@@ -71,6 +82,21 @@ type Ticket = {
   company_accent_color: string | null;
   project_title: string | null;
   project_status: string | null;
+  comment_count: number | string;
+  latest_comment_body: string | null;
+  latest_comment_at: string | null;
+};
+
+type TicketComment = {
+  id: string;
+  ticket_id: string;
+  company_id: string;
+  author_user_id: string | null;
+  author_role: string;
+  author_name: string | null;
+  author_email: string | null;
+  body: string;
+  created_at: string;
 };
 
 type BoardResponse = {
@@ -78,6 +104,12 @@ type BoardResponse = {
   tenants: Tenant[];
   projects: Project[];
   tickets: Ticket[];
+};
+
+type TicketDetailResponse = {
+  ticket?: Ticket;
+  comments?: TicketComment[];
+  error?: string;
 };
 
 type TicketFormState = {
@@ -96,12 +128,48 @@ type BucketFormState = {
   color: string;
 };
 
+type KpiTone = 'brand' | 'sky' | 'success' | 'warning' | 'danger' | 'violet';
+
+type KpiCardProps = {
+  label: string;
+  value: string;
+  detail: string;
+  icon: LucideIcon;
+  tone: KpiTone;
+};
+
 const clientPalette = ['#2f6b4f', '#2563eb', '#9f5b13', '#7c3aed', '#0f766e', '#be123c', '#4f46e5'];
 const priorityClasses: Record<Ticket['priority'], string> = {
   low: 'border-slate-200 bg-slate-50 text-slate-600',
   normal: 'border-[var(--ops-brand-soft-border)] bg-[var(--ops-brand-soft)] text-[var(--ops-brand-ink)]',
   high: 'border-[var(--ops-warning-soft-border)] bg-[var(--ops-warning-soft)] text-[var(--ops-warning-ink)]',
   urgent: 'border-[var(--ops-danger-soft-border)] bg-[var(--ops-danger-soft)] text-[var(--ops-danger-ink)]',
+};
+const kpiToneClasses: Record<KpiTone, { shell: string; icon: string }> = {
+  brand: {
+    shell: 'border-[var(--ops-brand-soft-border)] bg-[var(--ops-brand-soft)] text-[var(--ops-brand-ink)]',
+    icon: 'bg-[var(--ops-brand)] text-white',
+  },
+  sky: {
+    shell: 'border-[var(--ops-sky-soft-border)] bg-[var(--ops-sky-soft)] text-[var(--ops-sky-ink)]',
+    icon: 'bg-[#125995] text-white',
+  },
+  success: {
+    shell: 'border-[var(--ops-success-soft-border)] bg-[var(--ops-success-soft)] text-[var(--ops-success-ink)]',
+    icon: 'bg-[var(--ops-success)] text-white',
+  },
+  warning: {
+    shell: 'border-[var(--ops-warning-soft-border)] bg-[var(--ops-warning-soft)] text-[var(--ops-warning-ink)]',
+    icon: 'bg-[var(--ops-warning)] text-white',
+  },
+  danger: {
+    shell: 'border-[var(--ops-danger-soft-border)] bg-[var(--ops-danger-soft)] text-[var(--ops-danger-ink)]',
+    icon: 'bg-[var(--ops-danger)] text-white',
+  },
+  violet: {
+    shell: 'border-[var(--ops-violet-soft-border)] bg-[var(--ops-violet-soft)] text-[var(--ops-violet-ink)]',
+    icon: 'bg-[#5540c8] text-white',
+  },
 };
 
 function hashIndex(value: string, max: number) {
@@ -140,6 +208,50 @@ function formatDate(value: string | null | undefined) {
   return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return '—';
+  return new Date(value).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function commentCount(ticket: Ticket) {
+  return Number(ticket.comment_count || 0);
+}
+
+function isDoneBucket(bucket: Bucket | undefined) {
+  const name = bucket?.name.toLowerCase() || '';
+  return /\b(done|complete|completed|closed|resolved|shipped)\b/.test(name);
+}
+
+function isHumanNeedBucket(bucket: Bucket | undefined) {
+  const name = bucket?.name.toLowerCase() || '';
+  return /\b(waiting|client|human|review|blocked|approval|hold)\b/.test(name);
+}
+
+function isFailureBucket(bucket: Bucket | undefined) {
+  const name = bucket?.name.toLowerCase() || '';
+  return /\b(fail|failed|failure|error|blocked|stuck|rejected)\b/.test(name);
+}
+
+function hasMoved(ticket: Ticket) {
+  if (!ticket.created_at || !ticket.updated_at) return false;
+  const created = new Date(ticket.created_at).getTime();
+  const updated = new Date(ticket.updated_at).getTime();
+  if (!Number.isFinite(created) || !Number.isFinite(updated)) return false;
+  return updated - created > 60_000;
+}
+
+function isOverdue(ticket: Ticket, now: number) {
+  if (!ticket.due_date) return false;
+  const due = new Date(ticket.due_date).getTime();
+  if (!Number.isFinite(due)) return false;
+  return due < now;
+}
+
 function emptyTicketForm(buckets: Bucket[], tenants: Tenant[], bucketId?: string): TicketFormState {
   return {
     title: '',
@@ -158,9 +270,16 @@ export function TicketsTab() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [metricNow, setMetricNow] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [ticketComments, setTicketComments] = useState<TicketComment[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [commentBody, setCommentBody] = useState('');
+  const [postingComment, setPostingComment] = useState(false);
   const [query, setQuery] = useState('');
   const [ticketPanelOpen, setTicketPanelOpen] = useState(false);
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
@@ -199,6 +318,76 @@ export function TicketsTab() {
     return counts;
   }, [filteredTickets]);
 
+  const kpis = useMemo(() => {
+    const bucketById = new Map(buckets.map((bucket) => [bucket.id, bucket]));
+    const now = metricNow ?? 0;
+    const totalTasks = tickets.length;
+    const doneTasks = tickets.filter((ticket) => isDoneBucket(bucketById.get(ticket.bucket_id))).length;
+    const movedTasks = tickets.filter(hasMoved).length;
+    const needsHuman = tickets.filter((ticket) => {
+      const bucket = bucketById.get(ticket.bucket_id);
+      return isHumanNeedBucket(bucket) || ticket.priority === 'urgent';
+    }).length;
+    const failures = tickets.filter((ticket) => {
+      const bucket = bucketById.get(ticket.bucket_id);
+      return isFailureBucket(bucket) || (now > 0 && ticket.priority === 'urgent' && isOverdue(ticket, now));
+    }).length;
+    const dueSoon = tickets.filter((ticket) => {
+      if (!ticket.due_date || isDoneBucket(bucketById.get(ticket.bucket_id))) return false;
+      const due = new Date(ticket.due_date).getTime();
+      if (!Number.isFinite(due)) return false;
+      if (now <= 0) return false;
+      const daysUntilDue = (due - now) / 86_400_000;
+      return daysUntilDue >= 0 && daysUntilDue <= 7;
+    }).length;
+    const completionRate = totalTasks ? Math.round((doneTasks / totalTasks) * 100) : 0;
+
+    return [
+      {
+        label: 'Total tasks',
+        value: totalTasks.toLocaleString(),
+        detail: `${filteredTickets.length.toLocaleString()} visible`,
+        icon: BarChart3,
+        tone: 'brand',
+      },
+      {
+        label: 'Total moves',
+        value: movedTasks.toLocaleString(),
+        detail: 'Updated after create',
+        icon: MoveRight,
+        tone: 'sky',
+      },
+      {
+        label: 'Completions',
+        value: `${completionRate}%`,
+        detail: `${doneTasks.toLocaleString()} done`,
+        icon: CircleCheck,
+        tone: 'success',
+      },
+      {
+        label: 'Human need',
+        value: needsHuman.toLocaleString(),
+        detail: 'Review or urgent',
+        icon: Hand,
+        tone: 'warning',
+      },
+      {
+        label: 'Failures',
+        value: failures.toLocaleString(),
+        detail: 'Blocked or overdue',
+        icon: TriangleAlert,
+        tone: 'danger',
+      },
+      {
+        label: 'Tasks done',
+        value: doneTasks.toLocaleString(),
+        detail: `${dueSoon.toLocaleString()} due soon`,
+        icon: Check,
+        tone: 'violet',
+      },
+    ] satisfies KpiCardProps[];
+  }, [buckets, filteredTickets.length, metricNow, tickets]);
+
   const filteredProjects = projects.filter((project) => project.company_id === ticketForm.companyId);
 
   async function loadBoard() {
@@ -211,6 +400,7 @@ export function TicketsTab() {
       setTenants(json.tenants || []);
       setProjects(json.projects || []);
       setTickets((json.tickets || []) as Ticket[]);
+      setMetricNow(Date.now());
     } catch (err) {
       setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Could not load ticket board.' });
     } finally {
@@ -221,6 +411,63 @@ export function TicketsTab() {
   useEffect(() => {
     void loadBoard();
   }, []);
+
+  async function loadTicketDetail(ticketId: string) {
+    setDetailLoading(true);
+    setDetailError(null);
+    try {
+      const res = await fetch(`/api/admin/tickets/${ticketId}/comments`, { cache: 'no-store' });
+      const json = (await res.json()) as TicketDetailResponse;
+      if (!res.ok || !json.ticket) throw new Error(json.error || 'Could not load conversation.');
+      setSelectedTicket(json.ticket);
+      setTicketComments(json.comments || []);
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : 'Could not load conversation.');
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  function openConversation(ticket: Ticket) {
+    setSelectedTicket(ticket);
+    setTicketComments([]);
+    setCommentBody('');
+    setDetailError(null);
+    void loadTicketDetail(ticket.id);
+  }
+
+  function closeConversation() {
+    setSelectedTicket(null);
+    setTicketComments([]);
+    setCommentBody('');
+    setDetailError(null);
+  }
+
+  async function postComment() {
+    if (!selectedTicket || !commentBody.trim()) return;
+    setPostingComment(true);
+    setDetailError(null);
+    try {
+      const res = await fetch(`/api/admin/tickets/${selectedTicket.id}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: commentBody }),
+      });
+      const json = (await res.json()) as TicketDetailResponse;
+      if (!res.ok || !json.ticket) throw new Error(json.error || 'Could not add comment.');
+      setSelectedTicket(json.ticket);
+      setTicketComments(json.comments || []);
+      setTickets((items) =>
+        items.map((item) => (item.id === json.ticket?.id ? { ...item, ...json.ticket } : item)),
+      );
+      setCommentBody('');
+      setNotice({ type: 'success', text: 'Comment added.' });
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : 'Could not add comment.');
+    } finally {
+      setPostingComment(false);
+    }
+  }
 
   function openCreateTicket(bucketId?: string) {
     setEditingTicket(null);
@@ -425,6 +672,14 @@ export function TicketsTab() {
         </div>
       ) : null}
 
+      <section className="shrink-0 border-b border-[var(--ops-border)] bg-[var(--ops-bg)] px-4 py-3 lg:px-6">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          {kpis.map((kpi) => (
+            <KpiCard key={kpi.label} {...kpi} />
+          ))}
+        </div>
+      </section>
+
       <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-4 py-4 lg:px-6">
         <DndContext sensors={sensors} onDragEnd={onDragEnd}>
           <div className="flex h-full min-w-max gap-4">
@@ -438,6 +693,7 @@ export function TicketsTab() {
                 onCreateTicket={() => openCreateTicket(bucket.id)}
                 onEditBucket={() => openEditBucket(bucket)}
                 onEditTicket={openEditTicket}
+                onOpenConversation={openConversation}
                 onDeleteTicket={(ticket) => void deleteTicket(ticket)}
               />
             ))}
@@ -558,6 +814,38 @@ export function TicketsTab() {
           </div>
         </SidePanel>
       ) : null}
+
+      {selectedTicket ? (
+        <TicketConversationPanel
+          ticket={selectedTicket}
+          comments={ticketComments}
+          loading={detailLoading}
+          error={detailError}
+          commentBody={commentBody}
+          postingComment={postingComment}
+          onClose={closeConversation}
+          onCommentBodyChange={setCommentBody}
+          onPostComment={() => void postComment()}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function KpiCard({ label, value, detail, icon: Icon, tone }: KpiCardProps) {
+  const classes = kpiToneClasses[tone];
+  return (
+    <div className={cn('min-w-0 rounded-lg border p-3 shadow-[var(--ops-shadow-soft)]', classes.shell)}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-xs font-semibold uppercase text-[var(--ops-muted)]">{label}</p>
+          <p className="mt-1 text-2xl font-semibold tracking-normal text-[var(--ops-text)]">{value}</p>
+        </div>
+        <span className={cn('inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', classes.icon)}>
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <p className="mt-2 truncate text-xs font-medium">{detail}</p>
     </div>
   );
 }
@@ -570,6 +858,7 @@ function KanbanColumn({
   onCreateTicket,
   onEditBucket,
   onEditTicket,
+  onOpenConversation,
   onDeleteTicket,
 }: {
   bucket: Bucket;
@@ -579,6 +868,7 @@ function KanbanColumn({
   onCreateTicket: () => void;
   onEditBucket: () => void;
   onEditTicket: (ticket: Ticket) => void;
+  onOpenConversation: (ticket: Ticket) => void;
   onDeleteTicket: (ticket: Ticket) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: bucket.id });
@@ -627,6 +917,7 @@ function KanbanColumn({
               key={ticket.id}
               ticket={ticket}
               onEdit={() => onEditTicket(ticket)}
+              onOpenConversation={() => onOpenConversation(ticket)}
               onDelete={() => onDeleteTicket(ticket)}
             />
           ))
@@ -640,7 +931,17 @@ function KanbanColumn({
   );
 }
 
-function TicketCard({ ticket, onEdit, onDelete }: { ticket: Ticket; onEdit: () => void; onDelete: () => void }) {
+function TicketCard({
+  ticket,
+  onEdit,
+  onOpenConversation,
+  onDelete,
+}: {
+  ticket: Ticket;
+  onEdit: () => void;
+  onOpenConversation: () => void;
+  onDelete: () => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: ticket.id });
   const color = clientColor(ticket);
   const style: CSSProperties = {
@@ -682,6 +983,14 @@ function TicketCard({ ticket, onEdit, onDelete }: { ticket: Ticket; onEdit: () =
         <div className="flex shrink-0 gap-1">
           <button
             type="button"
+            onClick={onOpenConversation}
+            className="rounded-md p-1.5 text-[var(--ops-muted)] hover:bg-[var(--ops-brand-soft)] hover:text-[var(--ops-brand)]"
+            title="Open conversation"
+          >
+            <MessageSquareText className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
             onClick={onEdit}
             className="rounded-md p-1.5 text-[var(--ops-muted)] hover:bg-[var(--ops-surface-subtle)] hover:text-[var(--ops-text)]"
             title="Edit ticket"
@@ -701,6 +1010,11 @@ function TicketCard({ ticket, onEdit, onDelete }: { ticket: Ticket; onEdit: () =
       {ticket.description ? (
         <p className="mt-3 line-clamp-3 text-sm leading-5 text-[var(--ops-muted-strong)]">{ticket.description}</p>
       ) : null}
+      {ticket.latest_comment_body ? (
+        <div className="mt-3 rounded-lg border border-[var(--ops-brand-soft-border)] bg-[var(--ops-brand-soft)] px-3 py-2 text-xs leading-5 text-[var(--ops-brand-ink)]">
+          {ticket.latest_comment_body}
+        </div>
+      ) : null}
       <div className="mt-3 space-y-2 text-xs text-[var(--ops-muted)]">
         {ticket.project_title ? (
           <div className="rounded-md border border-[var(--ops-sky-soft-border)] bg-[var(--ops-sky-soft)] px-2.5 py-2 text-[var(--ops-sky-ink)]">
@@ -716,8 +1030,146 @@ function TicketCard({ ticket, onEdit, onDelete }: { ticket: Ticket; onEdit: () =
             {ticket.source.replace(/_/g, ' ')}
           </span>
         </div>
+        <button
+          type="button"
+          onClick={onOpenConversation}
+          className="inline-flex items-center gap-1.5 rounded-full bg-[var(--ops-surface-subtle)] px-2 py-1 text-xs font-semibold text-[var(--ops-muted-strong)] hover:bg-[var(--ops-brand-soft)] hover:text-[var(--ops-brand)]"
+        >
+          <MessageSquareText className="h-3.5 w-3.5" />
+          {commentCount(ticket)} {commentCount(ticket) === 1 ? 'comment' : 'comments'}
+        </button>
       </div>
     </article>
+  );
+}
+
+function TicketConversationPanel({
+  ticket,
+  comments,
+  loading,
+  error,
+  commentBody,
+  postingComment,
+  onClose,
+  onCommentBodyChange,
+  onPostComment,
+}: {
+  ticket: Ticket;
+  comments: TicketComment[];
+  loading: boolean;
+  error: string | null;
+  commentBody: string;
+  postingComment: boolean;
+  onClose: () => void;
+  onCommentBodyChange: (value: string) => void;
+  onPostComment: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950/30">
+      <aside className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col overflow-hidden bg-[var(--ops-surface)] shadow-2xl">
+        <div className="shrink-0 border-b border-[var(--ops-border)] px-5 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-white" style={{ backgroundColor: ticket.bucket_color || '#2f6b4f' }}>
+                  {ticket.bucket_name}
+                </span>
+                <span className="rounded-full bg-[var(--ops-surface-subtle)] px-2 py-0.5 text-[10px] font-semibold capitalize text-[var(--ops-muted-strong)]">
+                  {ticket.priority}
+                </span>
+              </div>
+              <h2 className="mt-2 text-lg font-semibold leading-6 text-[var(--ops-text)]">{ticket.title}</h2>
+              <p className="mt-1 text-sm text-[var(--ops-muted)]">{ticket.company_display_name || ticket.company_name}</p>
+            </div>
+            <button type="button" onClick={onClose} className="rounded-lg p-2 text-[var(--ops-muted)] hover:bg-[var(--ops-surface-subtle)]">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <section className="border-b border-[var(--ops-border)] px-5 py-4">
+            <p className="whitespace-pre-wrap text-sm leading-6 text-[var(--ops-muted-strong)]">
+              {ticket.description || 'No details added.'}
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+              <div className="rounded-lg border border-[var(--ops-border)] bg-[var(--ops-bg)] px-3 py-2">
+                <p className="font-semibold uppercase tracking-[0.12em] text-[var(--ops-muted)]">Due</p>
+                <p className="mt-1 font-semibold text-[var(--ops-text)]">{formatDate(ticket.due_date)}</p>
+              </div>
+              <div className="rounded-lg border border-[var(--ops-border)] bg-[var(--ops-bg)] px-3 py-2">
+                <p className="font-semibold uppercase tracking-[0.12em] text-[var(--ops-muted)]">Project</p>
+                <p className="mt-1 truncate font-semibold text-[var(--ops-text)]">{ticket.project_title || 'No project'}</p>
+              </div>
+            </div>
+          </section>
+
+          <section className="border-b border-[var(--ops-border)] px-5 py-4">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--ops-text)]">
+              <Files className="h-4 w-4 text-[var(--ops-brand)]" />
+              Files
+            </div>
+            <div className="rounded-lg border border-dashed border-[var(--ops-border)] bg-[var(--ops-bg)] px-4 py-5 text-center text-sm text-[var(--ops-muted)]">
+              No files
+            </div>
+          </section>
+
+          <section className="px-5 py-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-semibold text-[var(--ops-text)]">
+                <MessageSquareText className="h-4 w-4 text-[var(--ops-brand)]" />
+                Conversation
+              </div>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin text-[var(--ops-muted)]" /> : null}
+            </div>
+            {error ? (
+              <div className="mb-3 rounded-lg border border-[var(--ops-danger-soft-border)] bg-[var(--ops-danger-soft)] px-3 py-2 text-sm text-[var(--ops-danger-ink)]">
+                {error}
+              </div>
+            ) : null}
+            <div className="space-y-3">
+              {comments.length ? (
+                comments.map((comment) => (
+                  <article key={comment.id} className="rounded-lg border border-[var(--ops-border)] bg-white px-3 py-3">
+                    <p className="whitespace-pre-wrap text-sm leading-6 text-[var(--ops-text)]">{comment.body}</p>
+                    <div className="mt-3 flex items-center justify-between gap-3 text-xs text-[var(--ops-muted)]">
+                      <span className="font-semibold text-[var(--ops-muted-strong)]">{comment.author_name || comment.author_email || 'WNY Automation'}</span>
+                      <span>{formatDateTime(comment.created_at)}</span>
+                    </div>
+                  </article>
+                ))
+              ) : (
+                <div className="rounded-lg border border-dashed border-[var(--ops-border)] bg-[var(--ops-bg)] px-4 py-6 text-center text-sm text-[var(--ops-muted)]">
+                  No comments
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+
+        <div className="shrink-0 border-t border-[var(--ops-border)] bg-[var(--ops-surface)] p-5">
+          <textarea
+            value={commentBody}
+            onChange={(event) => onCommentBodyChange(event.target.value)}
+            placeholder="Write a comment..."
+            maxLength={4000}
+            className="min-h-24 w-full resize-none rounded-lg border border-[var(--ops-border-strong)] bg-white px-3 py-3 text-sm outline-none focus:border-[var(--ops-brand)]"
+          />
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <span className="text-xs text-[var(--ops-muted)]">{commentBody.trim().length.toLocaleString()} / 4,000</span>
+            <button
+              type="button"
+              onClick={onPostComment}
+              disabled={postingComment || !commentBody.trim()}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[var(--ops-brand)] px-4 text-sm font-semibold text-white hover:bg-[var(--ops-brand-strong)] disabled:pointer-events-none disabled:opacity-50"
+            >
+              {postingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Send
+            </button>
+          </div>
+        </div>
+      </aside>
+    </div>
   );
 }
 

@@ -40,6 +40,7 @@ export function getSafeRedirectPath(sp: SearchParamsLike): string {
 
   const lower = decoded.toLowerCase();
   if (lower === '/login' || lower.startsWith('/login?')) return DEFAULT_POST_AUTH_PATH;
+  if (lower === '/admin/admin' || lower.startsWith('/admin/admin?')) return DEFAULT_POST_AUTH_PATH;
   if (lower === '/sign-in' || lower.startsWith('/sign-in/') || lower.startsWith('/sign-in?')) {
     return DEFAULT_POST_AUTH_PATH;
   }

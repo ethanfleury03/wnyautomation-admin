@@ -242,7 +242,7 @@ async function main() {
       launchUrl:
         process.env.STAGING_GATEWAY_AWP_PORTAL_URL ||
         process.env.GATEWAY_AWP_PORTAL_URL ||
-        'https://awp-growth-portal-git-staging-ethanfleury03s-projects.vercel.app',
+        'https://staging.awp.wnyautomation.com',
     });
 
     await client.query('COMMIT');

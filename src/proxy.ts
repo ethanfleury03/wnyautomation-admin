@@ -1,7 +1,7 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { NextFetchEvent, NextRequest } from 'next/server';
-import { getClerkProxyUrl } from '@/lib/clerk-proxy-config';
+import { getClerkRuntimeProps } from '@/lib/clerk-proxy-config';
 
 const isPublicRoute = createRouteMatcher([
   '/',
@@ -18,6 +18,8 @@ const isPublicRoute = createRouteMatcher([
 ]);
 
 const isProtectedRoute = createRouteMatcher(['/admin(.*)', '/api/admin(.*)']);
+
+const clerkMiddlewareOptions = getClerkRuntimeProps();
 
 const clerkAuthMiddleware = clerkMiddleware(
   async (auth, req) => {
@@ -40,7 +42,7 @@ const clerkAuthMiddleware = clerkMiddleware(
 
     return NextResponse.next();
   },
-  getClerkProxyUrl() ? { proxyUrl: getClerkProxyUrl() } : {},
+  Object.keys(clerkMiddlewareOptions).length > 0 ? clerkMiddlewareOptions : {},
 );
 
 export default function proxy(req: NextRequest, event: NextFetchEvent) {

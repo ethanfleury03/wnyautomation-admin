@@ -1,6 +1,10 @@
-import { getClerkProxyUrl, getClerkProxyVerificationUrl } from '@/lib/clerk-proxy-config';
+import { fapiUrlFromPublishableKey } from '@clerk/backend/proxy';
+import {
+  getClerkProxyUrl,
+  getClerkProxyVerificationUrl,
+  getClerkPublishableKeyFrontendApi,
+} from '@/lib/clerk-proxy-config';
 
-const CLERK_FAPI_ORIGIN = 'https://frontend-api.clerk.dev';
 const CLERK_PROXY_PATH = '/clerk-proxy';
 
 const HOP_BY_HOP_HEADERS = new Set([
@@ -49,7 +53,13 @@ function copyRequestHeaders(request: Request, targetHost: string) {
   return headers;
 }
 
-function copyResponseHeaders(response: Response) {
+function getClerkFapiOrigin() {
+  const host = getClerkPublishableKeyFrontendApi();
+  if (!host) return '';
+  return fapiUrlFromPublishableKey(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || '');
+}
+
+function copyResponseHeaders(response: Response, fapiOrigin: string) {
   const headers = new Headers();
 
   response.headers.forEach((value, key) => {
@@ -61,8 +71,8 @@ function copyResponseHeaders(response: Response) {
 
   const location = response.headers.get('location');
   if (location) {
-    const fapiHost = new URL(CLERK_FAPI_ORIGIN).host;
-    const locationUrl = new URL(location, CLERK_FAPI_ORIGIN);
+    const fapiHost = new URL(fapiOrigin).host;
+    const locationUrl = new URL(location, fapiOrigin);
     if (locationUrl.host === fapiHost) {
       headers.set('Location', `${getClerkProxyUrl()}${locationUrl.pathname}${locationUrl.search}${locationUrl.hash}`);
     }
@@ -75,10 +85,14 @@ async function proxyClerkRequest(request: Request) {
   if (!process.env.CLERK_SECRET_KEY) {
     return Response.json({ error: 'Missing CLERK_SECRET_KEY' }, { status: 500 });
   }
+  const fapiOrigin = getClerkFapiOrigin();
+  if (!fapiOrigin) {
+    return Response.json({ error: 'Missing or invalid NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY' }, { status: 500 });
+  }
 
   const requestUrl = new URL(request.url);
   const targetPath = requestUrl.pathname.slice(CLERK_PROXY_PATH.length) || '/';
-  const targetUrl = new URL(`${CLERK_FAPI_ORIGIN}${targetPath}`);
+  const targetUrl = new URL(`${fapiOrigin}${targetPath}`);
   targetUrl.search = requestUrl.search;
 
   const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
@@ -95,7 +109,7 @@ async function proxyClerkRequest(request: Request) {
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
-    headers: copyResponseHeaders(response),
+    headers: copyResponseHeaders(response, fapiOrigin),
   });
 }
 

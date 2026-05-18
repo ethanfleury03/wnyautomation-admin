@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { ClerkProvider } from '@clerk/nextjs';
 import { IBM_Plex_Mono, Manrope } from 'next/font/google';
-import { getClerkProxyUrl } from '@/lib/clerk-proxy-config';
+import { getClerkRuntimeProps } from '@/lib/clerk-proxy-config';
 import { getClientPortalUrl } from '@/lib/portal-url';
 import './globals.css';
 
@@ -50,17 +50,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const clientPortalUrl = getClientPortalUrl();
-  const clerkProxyUrl = getClerkProxyUrl();
+  const clerkRuntimeProps = getClerkRuntimeProps();
+  const signInUrl = process.env.APP_ENV === 'staging' ? clientPortalUrl : '/sign-in';
 
   return (
     <html lang="en">
       <body className={`${appSans.variable} ${appMono.variable} min-h-screen bg-[var(--ops-bg)] antialiased`}>
         <ClerkProvider
-          signInUrl="/sign-in"
-          signUpUrl="/sign-in"
+          signInUrl={signInUrl}
+          signUpUrl={signInUrl}
           afterSignOutUrl={clientPortalUrl}
           localization={clerkLocalization}
-          {...(clerkProxyUrl ? { proxyUrl: clerkProxyUrl } : {})}
+          {...clerkRuntimeProps}
         >
           {children}
         </ClerkProvider>

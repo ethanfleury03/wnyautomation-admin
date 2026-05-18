@@ -12,18 +12,17 @@ Production DNS stays clean:
 - `https://admin.wnyautomation.com` -> admin app
 - `https://awp.wnyautomation.com` -> AWP portal
 
-Staging uses Vercel branch aliases only:
+Staging uses durable custom domains attached to the Vercel custom
+`staging` environment:
 
-- `https://wnyautomation-git-staging-wny-automation.vercel.app`
-- `https://wnyautomation-portal-gateway-git-staging-wny-automation.vercel.app`
-- `https://wnyautomation-admin-git-staging-ethanfleury03s-projects.vercel.app`
-- `https://wnyautomation-portal-git-staging-wny-automation.vercel.app`
+- `https://staging.wnyautomation.com` -> marketing site
+- `https://staging.app.wnyautomation.com` -> portal gateway
+- `https://staging.admin.wnyautomation.com` -> admin app
+- `https://staging.awp.wnyautomation.com` -> AWP portal
 
-This mapping matches the currently linked Vercel projects: site, gateway, and
-AWP portal live under the `wny-automation` team; admin lives under
-`ethanfleury03s-projects`. Confirm the actual generated alias after the first
-`staging` branch deployment because Vercel returns `404` until that branch has
-deployed at least once.
+All staging app projects and `wnyautomation.com` DNS should live under the
+same Vercel team, preferably `wny-automation`, so staging aliases can be
+updated by the deployment system without manual cross-team domain access.
 
 ## Branch And Vercel Setup
 
@@ -48,23 +47,19 @@ vercel link --yes --scope wny-automation --project wnyautomation-portal
 
 Keep `.vercel/` ignored. Never commit Vercel project metadata.
 
-If a Git-triggered gateway preview remains in Vercel's `UNKNOWN` state with no
-build logs, deploy it manually from the `staging` branch and re-point the branch
-alias:
+Use Vercel's custom `staging` environment for all app projects. The `staging`
+branch should deploy to that environment and own the corresponding custom
+domain. Manual deployment is only a fallback:
 
 ```bash
 cd /Users/ethanfleury/projects/wnyautomation-portal-gateway
-vercel --scope wny-automation --yes
-vercel alias set <ready-preview-url> \
-  wnyautomation-portal-gateway-git-staging-wny-automation.vercel.app \
-  --scope wny-automation
+vercel deploy --target=staging --scope wny-automation --yes
 ```
 
 ## Staging Environment Variables
 
-Each repo has a `.env.staging.example`. Copy its values into Vercel Preview
-environment variables scoped to the `staging` branch. Do not commit real
-secrets.
+Each repo has a `.env.staging.example`. Copy its values into the Vercel
+custom `staging` environment. Do not commit real secrets.
 
 Shared platform DB:
 
@@ -81,10 +76,25 @@ Marketing site DB:
 
 Routing contract:
 
-- Gateway `GATEWAY_AWP_PORTAL_URL` points to the AWP staging branch alias.
-- AWP `PORTAL_GATEWAY_URL` points to the gateway staging branch alias.
+- Gateway `GATEWAY_AWP_PORTAL_URL` points to the AWP staging custom domain.
+- AWP `PORTAL_GATEWAY_URL` points to the gateway staging custom domain.
 - Gateway `GATEWAY_INTERNAL_ACCESS_TOKEN` and AWP
   `PORTAL_GATEWAY_SERVICE_TOKEN` must be the same staging-only token.
+- Gateway `GATEWAY_AWP_FALLBACK_SECRET` and AWP
+  `PORTAL_GATEWAY_FALLBACK_SECRET` must be the same staging-only random secret.
+
+Clerk contract:
+
+- Create a dedicated Clerk app named `WNY Automation Staging`.
+- Use that app's publishable and secret keys in gateway, admin, and AWP
+  staging envs.
+- Set `CLERK_EXPECTED_FAPI_HOST` to the decoded Frontend API host for that
+  staging Clerk app in all three repos.
+- Gateway uses `NEXT_PUBLIC_CLERK_PROXY_URL=https://staging.app.wnyautomation.com/clerk-proxy`.
+- Admin and AWP use their own staging proxy URLs and
+  `NEXT_PUBLIC_CLERK_IS_SATELLITE=true`.
+- No staging env may use the production Clerk Frontend API host
+  `clerk.wnyautomation.com`.
 
 ## Seed Order
 
@@ -127,12 +137,16 @@ npm run test && npm run build
 Verify deployed staging:
 
 - Vercel deployments for all four `staging` branches are `READY`.
-- No staging deployment has a custom `*.wnyautomation.com` domain.
+- Each staging deployment owns its expected custom `*.wnyautomation.com`
+  domain.
 - Admin `/api/admin/system-health` shows the staging DB fingerprint.
 - Gateway `/api/internal/db-info` shows the same staging DB fingerprint.
 - AWP `/api/internal/db-info` shows the same staging DB fingerprint.
 - Gateway `/api/internal/access/verify` allows `staging.awp.admin@wnyautomation.test`.
-- Gateway launches the AWP staging branch URL, not `https://awp.wnyautomation.com`.
+- Gateway launches `https://staging.awp.wnyautomation.com`, not
+  `https://awp.wnyautomation.com`.
+- Gateway `npm run smoke:staging-auth` passes after the Clerk staging app and
+  Vercel staging env values are live.
 - Site `/`, `/blog`, `/api/blogs?limit=6`, and `/client-login` work.
 - Staging responses include `X-Robots-Tag: noindex, nofollow`.
 

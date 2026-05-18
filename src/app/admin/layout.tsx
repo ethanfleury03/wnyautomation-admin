@@ -1,5 +1,6 @@
 import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
+import { readGatewayFallbackSession } from '@/lib/auth/gateway-fallback';
 import { isPortalResponse, requireSuperAdmin } from '@/lib/auth/tenant';
 
 export default async function AdminLayout({
@@ -7,7 +8,9 @@ export default async function AdminLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  await auth.protect();
+  const fallbackSession = await readGatewayFallbackSession();
+  if (!fallbackSession) await auth.protect();
+
   const admin = await requireSuperAdmin();
   if (isPortalResponse(admin)) {
     redirect('/not-authorized');

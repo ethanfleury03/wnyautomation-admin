@@ -1,5 +1,6 @@
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
+import { readGatewayFallbackSession } from '@/lib/auth/gateway-fallback';
 import type { SessionUser, UserRole } from '@/lib/auth/types';
 import { roleAtLeast } from '@/lib/auth/types';
 
@@ -26,6 +27,9 @@ function initialsFor(name: string, email: string): string {
 }
 
 export async function getAdminSessionUser(): Promise<SessionUser | null> {
+  const fallbackUser = await getGatewayFallbackAdminUser();
+  if (fallbackUser) return fallbackUser;
+
   const { userId } = await auth();
   if (!userId) return null;
 
@@ -40,6 +44,25 @@ export async function getAdminSessionUser(): Promise<SessionUser | null> {
   const name = user?.fullName || user?.firstName || normalizedEmail;
   return {
     id: user?.id || userId,
+    email: normalizedEmail,
+    name,
+    role: 'super_admin',
+    companyId: process.env.ADMIN_AUDIT_COMPANY_ID || DEFAULT_AUDIT_COMPANY_ID,
+    branchId: null,
+    avatarInitials: initialsFor(name, normalizedEmail),
+  };
+}
+
+async function getGatewayFallbackAdminUser(): Promise<SessionUser | null> {
+  const session = await readGatewayFallbackSession();
+  if (!session?.email) return null;
+
+  const normalizedEmail = session.email.trim().toLowerCase();
+  if (!configuredAdminEmails().has(normalizedEmail)) return null;
+
+  const name = session.name?.trim() || normalizedEmail;
+  return {
+    id: session.gatewayUserId ? `gateway:${session.gatewayUserId}` : `gateway:${normalizedEmail}`,
     email: normalizedEmail,
     name,
     role: 'super_admin',
@@ -92,13 +115,9 @@ export function isPortalResponse(v: unknown): v is NextResponse {
 }
 
 export async function requireSuperAdmin(): Promise<SessionUser | NextResponse> {
-  const { userId } = await auth();
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
   const user = await getAdminSessionUser();
   if (!user) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   return user;
 }

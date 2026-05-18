@@ -11,7 +11,20 @@ function clean(value: string | undefined) {
   return (value || '').trim();
 }
 
+function isStagingFallbackAuthEnabled() {
+  return (
+    process.env.APP_ENV === 'staging' &&
+    Boolean(clean(process.env.PORTAL_GATEWAY_FALLBACK_SECRET) || clean(process.env.ADMIN_GATEWAY_FALLBACK_SECRET))
+  );
+}
+
+function shouldUseClerkSatellitesInStaging() {
+  return process.env.STAGING_USE_CLERK_SATELLITES === '1';
+}
+
 export function getClerkProxyUrl() {
+  if (isStagingFallbackAuthEnabled() && !shouldUseClerkSatellitesInStaging()) return undefined;
+
   const explicitProxyUrl = clean(process.env.NEXT_PUBLIC_CLERK_PROXY_URL) || clean(process.env.CLERK_PROXY_URL);
   if (explicitProxyUrl) return assertStagingSafeUrl('NEXT_PUBLIC_CLERK_PROXY_URL', explicitProxyUrl);
 
@@ -33,7 +46,7 @@ export function getClerkProxyVerificationUrl() {
     assertStagingClerkPublishableKey();
     return assertStagingSafeUrl('CLERK_PROXY_VERIFICATION_URL', verificationUrl);
   }
-  return (verificationUrl || getClerkProxyUrl()).replace(/\/$/, '');
+  return (verificationUrl || getClerkProxyUrl())?.replace(/\/$/, '') || '';
 }
 
 function assertStagingSafeUrl(name: string, value: string) {
@@ -99,6 +112,7 @@ export function assertStagingClerkPublishableKey() {
 }
 
 export function isClerkSatellite() {
+  if (isStagingFallbackAuthEnabled() && !shouldUseClerkSatellitesInStaging()) return false;
   return process.env.NEXT_PUBLIC_CLERK_IS_SATELLITE === 'true' || process.env.APP_ENV === 'staging';
 }
 

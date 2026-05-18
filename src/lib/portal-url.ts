@@ -42,3 +42,10 @@ export function getClientPortalUrl(): string {
 
   return configured || DEFAULT_CLIENT_LOGIN_URL;
 }
+
+export function getGatewayLogoutUrl(): string {
+  const url = new URL(getClientPortalUrl());
+  url.pathname = '/api/staging-logout';
+  url.search = '';
+  return url.toString();
+}

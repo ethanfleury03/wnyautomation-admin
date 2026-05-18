@@ -5,6 +5,10 @@ import { getClerkRuntimeProps } from '@/lib/clerk-proxy-config';
 import { getClientPortalUrl } from '@/lib/portal-url';
 
 const GATEWAY_FALLBACK_COOKIE = 'admin_gateway_fallback';
+const isStagingDummyAuth =
+  process.env.APP_ENV === 'staging' &&
+  process.env.STAGING_USE_CLERK_SATELLITES !== '1' &&
+  Boolean(process.env.PORTAL_GATEWAY_FALLBACK_SECRET || process.env.ADMIN_GATEWAY_FALLBACK_SECRET);
 
 const isPublicRoute = createRouteMatcher([
   '/',
@@ -63,6 +67,28 @@ const clerkAuthMiddleware = clerkMiddleware(
 );
 
 export default function proxy(req: NextRequest, event: NextFetchEvent) {
+  if (isStagingDummyAuth) {
+    if (isPublicRoute(req)) {
+      if (req.nextUrl.pathname === '/sign-in' || req.nextUrl.pathname.startsWith('/sign-in/')) {
+        return NextResponse.redirect(getClientPortalUrl(), 307);
+      }
+      if (req.nextUrl.pathname === '/sign-up' || req.nextUrl.pathname.startsWith('/sign-up/')) {
+        return NextResponse.redirect(getClientPortalUrl(), 307);
+      }
+      return NextResponse.next();
+    }
+
+    if (isProtectedRoute(req)) {
+      if (req.cookies.has(GATEWAY_FALLBACK_COOKIE)) return NextResponse.next();
+      if (req.nextUrl.pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      return NextResponse.redirect(getClientPortalUrl(), 307);
+    }
+
+    return NextResponse.next();
+  }
+
   return clerkAuthMiddleware(req, event);
 }
 

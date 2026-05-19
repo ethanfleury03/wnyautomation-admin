@@ -15,10 +15,15 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   AlertCircle,
   BarChart3,
+  CalendarDays,
   CalendarClock,
   Check,
+  CheckCircle2,
   CircleCheck,
+  Edit3,
+  FileText,
   Files,
+  FolderOpen,
   GripVertical,
   Hand,
   Loader2,
@@ -126,6 +131,23 @@ type TicketFormState = {
   priority: Ticket['priority'];
   requesterEmail: string;
   dueDate: string;
+};
+
+type TicketPanel = 'conversation' | 'solution' | 'files';
+
+type TicketSolution = {
+  status: 'ready' | 'draft' | 'pending';
+  label: string;
+  body: string;
+  updatedAt: string | null;
+  artifacts: TicketArtifact[];
+};
+
+type TicketArtifact = {
+  id: string;
+  label: string;
+  href: string;
+  kind: 'drive' | 'url' | 'local';
 };
 
 type BucketFormState = {
@@ -294,6 +316,142 @@ function emptyTicketForm(buckets: Bucket[], tenants: Tenant[], bucketId?: string
   };
 }
 
+function ticketToForm(ticket: Ticket): TicketFormState {
+  return {
+    title: ticket.title,
+    description: ticket.description || '',
+    companyId: ticket.company_id,
+    projectId: ticket.project_id || '',
+    bucketId: ticket.bucket_id,
+    priority: ticket.priority,
+    requesterEmail: ticket.requester_email || '',
+    dueDate: dateInputValue(ticket.due_date),
+  };
+}
+
+function priorityLabel(value: string) {
+  return value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : 'Normal';
+}
+
+function isAgentComment(comment: TicketComment) {
+  return comment.author_role === 'agent' || /agent/i.test(comment.author_name || '');
+}
+
+function isProgressOnlyAgentComment(body: string) {
+  return /started working|is blocked|needs more information|hit an issue/i.test(body);
+}
+
+function artifactKind(href: string): TicketArtifact['kind'] {
+  if (/drive\.google\.com|docs\.google\.com/i.test(href)) return 'drive';
+  if (/^https?:\/\//i.test(href)) return 'url';
+  return 'local';
+}
+
+function artifactLabel(value: string) {
+  try {
+    const url = new URL(value);
+    if (/docs\.google\.com/i.test(url.hostname)) {
+      if (url.pathname.startsWith('/spreadsheets/')) return 'Google Sheet';
+      if (url.pathname.startsWith('/document/')) return 'Google Doc';
+      if (url.pathname.startsWith('/presentation/')) return 'Google Slides';
+      if (url.pathname.startsWith('/forms/')) return 'Google Form';
+    }
+    if (/drive\.google\.com/i.test(url.hostname)) {
+      if (url.pathname.includes('/folders/')) return 'Google Drive folder';
+      return 'Google Drive file';
+    }
+    const segments = url.pathname.split('/').filter(Boolean);
+    return segments.at(-1) || url.hostname;
+  } catch {
+    return value.split('/').filter(Boolean).at(-1) || value;
+  }
+}
+
+function pushArtifact(artifacts: TicketArtifact[], seen: Set<string>, href: string, label?: string) {
+  const cleaned = href.trim();
+  if (!cleaned || seen.has(cleaned)) return;
+  if (!/^(\/|https?:\/\/)/i.test(cleaned)) return;
+  seen.add(cleaned);
+  artifacts.push({
+    id: cleaned,
+    href: cleaned,
+    label: label?.trim() || artifactLabel(cleaned),
+    kind: artifactKind(cleaned),
+  });
+}
+
+function extractArtifactLinks(body: string): TicketArtifact[] {
+  const artifacts: TicketArtifact[] = [];
+  const seen = new Set<string>();
+  const markdownLinkPattern = /\[([^\]]+)]\((https?:\/\/[^)\s]+)\)/g;
+  const rawUrlPattern = /https?:\/\/[^\s)]+/g;
+
+  for (const match of body.matchAll(markdownLinkPattern)) {
+    pushArtifact(artifacts, seen, match[2], match[1]);
+  }
+
+  for (const line of body.split('\n')) {
+    const trimmed = line.trim();
+    const bulletValue = trimmed.startsWith('- ') ? trimmed.slice(2).trim() : '';
+    if (bulletValue) {
+      const markdownMatch = /^\[([^\]]+)]\((https?:\/\/[^)\s]+)\)$/.exec(bulletValue);
+      if (markdownMatch) {
+        pushArtifact(artifacts, seen, markdownMatch[2], markdownMatch[1]);
+      } else {
+        pushArtifact(artifacts, seen, bulletValue);
+      }
+    }
+
+    for (const match of trimmed.matchAll(rawUrlPattern)) {
+      pushArtifact(artifacts, seen, match[0]);
+    }
+  }
+
+  return artifacts;
+}
+
+function ticketSolution(ticket: Ticket, comments: TicketComment[]): TicketSolution {
+  const agentComments = comments.filter(isAgentComment);
+  const latestAgentComment = agentComments.at(-1);
+  const readyStatus = /ready for review|done/i.test(ticket.bucket_name || '');
+
+  if (!latestAgentComment || (!readyStatus && isProgressOnlyAgentComment(latestAgentComment.body))) {
+    return {
+      status: 'pending',
+      label: 'Summary pending',
+      body: [
+        `This ticket is currently ${ticket.bucket_name}.`,
+        '',
+        'Request summary',
+        ticket.description?.trim() || ticket.title,
+        '',
+        `Urgency: ${priorityLabel(ticket.priority)}`,
+        `Due date: ${formatDate(ticket.due_date)}`,
+        '',
+        'No final solution has been posted yet. When the work is complete, this report will show the final summary and any Google Drive deliverables linked to the ticket.',
+      ].join('\n'),
+      updatedAt: null,
+      artifacts: [],
+    };
+  }
+
+  return {
+    status: readyStatus ? 'ready' : 'draft',
+    label: readyStatus ? 'Solution ready' : 'Draft solution',
+    body: latestAgentComment.body,
+    updatedAt: latestAgentComment.created_at,
+    artifacts: extractArtifactLinks(latestAgentComment.body),
+  };
+}
+
+function syncTicketUrl(ticketId: string | null) {
+  if (typeof window === 'undefined') return;
+  const url = new URL(window.location.href);
+  if (ticketId) url.searchParams.set('ticket', ticketId);
+  else url.searchParams.delete('ticket');
+  window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
 export function TicketsTab() {
   const [buckets, setBuckets] = useState<Bucket[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -309,6 +467,8 @@ export function TicketsTab() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [commentBody, setCommentBody] = useState('');
   const [postingComment, setPostingComment] = useState(false);
+  const [deletingTicketId, setDeletingTicketId] = useState<string | null>(null);
+  const [autoOpenedTicketId, setAutoOpenedTicketId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [ticketPanelOpen, setTicketPanelOpen] = useState(false);
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
@@ -457,11 +617,31 @@ export function TicketsTab() {
     }
   }
 
-  function openConversation(ticket: Ticket) {
+  useEffect(() => {
+    if (typeof window === 'undefined' || loading || autoOpenedTicketId) return;
+    const ticketId = new URLSearchParams(window.location.search).get('ticket');
+    if (!ticketId) return;
+    setAutoOpenedTicketId(ticketId);
+    const ticket = tickets.find((item) => item.id === ticketId);
+    if (ticket) {
+      setSelectedTicket(ticket);
+      setTicketComments([]);
+      setCommentBody('');
+      setEditingTicket(null);
+      setDetailError(null);
+    }
+    void loadTicketDetail(ticketId);
+  }, [autoOpenedTicketId, loading, tickets]);
+
+  function openTicket(ticket: Ticket, mode: 'view' | 'edit' = 'view') {
     setSelectedTicket(ticket);
     setTicketComments([]);
     setCommentBody('');
+    setEditingTicket(mode === 'edit' ? ticket : null);
+    setTicketForm(ticketToForm(ticket));
     setDetailError(null);
+    setAutoOpenedTicketId(ticket.id);
+    syncTicketUrl(ticket.id);
     void loadTicketDetail(ticket.id);
   }
 
@@ -469,7 +649,22 @@ export function TicketsTab() {
     setSelectedTicket(null);
     setTicketComments([]);
     setCommentBody('');
+    setEditingTicket(null);
     setDetailError(null);
+    setAutoOpenedTicketId(null);
+    syncTicketUrl(null);
+  }
+
+  function startEditingSelectedTicket() {
+    if (!selectedTicket) return;
+    setEditingTicket(selectedTicket);
+    setTicketForm(ticketToForm(selectedTicket));
+    setNotice(null);
+  }
+
+  function cancelEditingSelectedTicket() {
+    setEditingTicket(null);
+    if (selectedTicket) setTicketForm(ticketToForm(selectedTicket));
   }
 
   async function postComment() {
@@ -500,25 +695,16 @@ export function TicketsTab() {
 
   function openCreateTicket(bucketId?: string) {
     setEditingTicket(null);
+    setSelectedTicket(null);
+    setTicketComments([]);
+    setCommentBody('');
     setTicketForm(emptyTicketForm(buckets, tenants, bucketId));
     setTicketPanelOpen(true);
     setNotice(null);
   }
 
   function openEditTicket(ticket: Ticket) {
-    setEditingTicket(ticket);
-    setTicketForm({
-      title: ticket.title,
-      description: ticket.description || '',
-      companyId: ticket.company_id,
-      projectId: ticket.project_id || '',
-      bucketId: ticket.bucket_id,
-      priority: ticket.priority,
-      requesterEmail: ticket.requester_email || '',
-      dueDate: dateInputValue(ticket.due_date),
-    });
-    setTicketPanelOpen(true);
-    setNotice(null);
+    openTicket(ticket, 'edit');
   }
 
   function openCreateBucket() {
@@ -536,6 +722,7 @@ export function TicketsTab() {
   }
 
   async function saveTicket() {
+    const editingTicketId = editingTicket?.id || null;
     setSaving(true);
     setNotice(null);
     try {
@@ -550,6 +737,10 @@ export function TicketsTab() {
       setNotice({ type: 'success', text: editingTicket ? 'Ticket updated.' : 'Ticket created.' });
       setTicketPanelOpen(false);
       await loadBoard();
+      if (editingTicketId) {
+        setEditingTicket(null);
+        await loadTicketDetail(editingTicketId);
+      }
     } catch (err) {
       setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Could not save ticket.' });
     } finally {
@@ -560,14 +751,18 @@ export function TicketsTab() {
   async function deleteTicket(ticket: Ticket) {
     if (!window.confirm(`Delete "${ticket.title}"?`)) return;
     setNotice(null);
+    setDeletingTicketId(ticket.id);
     try {
       const res = await fetch(`/api/admin/tickets/${ticket.id}`, { method: 'DELETE' });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || 'Could not delete ticket.');
       setNotice({ type: 'success', text: 'Ticket deleted.' });
+      if (selectedTicket?.id === ticket.id) closeConversation();
       await loadBoard();
     } catch (err) {
       setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Could not delete ticket.' });
+    } finally {
+      setDeletingTicketId(null);
     }
   }
 
@@ -722,7 +917,7 @@ export function TicketsTab() {
                 onCreateTicket={() => openCreateTicket(bucket.id)}
                 onEditBucket={() => openEditBucket(bucket)}
                 onEditTicket={openEditTicket}
-                onOpenConversation={openConversation}
+                onOpenConversation={openTicket}
                 onDeleteTicket={(ticket) => void deleteTicket(ticket)}
               />
             ))}
@@ -738,7 +933,7 @@ export function TicketsTab() {
       </div>
 
       {ticketPanelOpen ? (
-        <SidePanel title={editingTicket ? 'Edit ticket' : 'Create ticket'} onClose={() => setTicketPanelOpen(false)}>
+        <SidePanel title="Create ticket" onClose={() => setTicketPanelOpen(false)}>
           <div className="space-y-4">
             <Field label="Title" value={ticketForm.title} onChange={(value) => setTicketForm((form) => ({ ...form, title: value }))} required />
             <label className="block">
@@ -845,15 +1040,24 @@ export function TicketsTab() {
       ) : null}
 
       {selectedTicket ? (
-        <TicketConversationPanel
+        <TicketWorkspaceModal
           ticket={selectedTicket}
           comments={ticketComments}
           loading={detailLoading}
           error={detailError}
           commentBody={commentBody}
+          draft={editingTicket?.id === selectedTicket.id ? ticketForm : null}
+          buckets={buckets}
           postingComment={postingComment}
+          updating={saving}
+          deleting={deletingTicketId === selectedTicket.id}
           onClose={closeConversation}
           onCommentBodyChange={setCommentBody}
+          onDraftChange={setTicketForm}
+          onEdit={startEditingSelectedTicket}
+          onCancelEdit={cancelEditingSelectedTicket}
+          onUpdate={() => void saveTicket()}
+          onDelete={() => void deleteTicket(selectedTicket)}
           onPostComment={() => void postComment()}
         />
       ) : null}
@@ -1078,15 +1282,24 @@ function TicketCard({
   );
 }
 
-function TicketConversationPanel({
+function TicketWorkspaceModal({
   ticket,
   comments,
   loading,
   error,
   commentBody,
+  draft,
+  buckets,
   postingComment,
+  updating,
+  deleting,
   onClose,
   onCommentBodyChange,
+  onDraftChange,
+  onEdit,
+  onCancelEdit,
+  onUpdate,
+  onDelete,
   onPostComment,
 }: {
   ticket: Ticket;
@@ -1094,129 +1307,456 @@ function TicketConversationPanel({
   loading: boolean;
   error: string | null;
   commentBody: string;
+  draft: TicketFormState | null;
+  buckets: Bucket[];
   postingComment: boolean;
+  updating: boolean;
+  deleting: boolean;
   onClose: () => void;
   onCommentBodyChange: (value: string) => void;
+  onDraftChange: (draft: TicketFormState) => void;
+  onEdit: () => void;
+  onCancelEdit: () => void;
+  onUpdate: () => void;
+  onDelete: () => void;
   onPostComment: () => void;
 }) {
   const agent = agentStatus(ticket);
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-950/30">
-      <aside className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col overflow-hidden bg-[var(--ops-surface)] shadow-2xl">
-        <div className="shrink-0 border-b border-[var(--ops-border)] px-5 py-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-white" style={{ backgroundColor: ticket.bucket_color || '#2f6b4f' }}>
-                  {ticket.bucket_name}
-                </span>
-                <span className="rounded-full bg-[var(--ops-surface-subtle)] px-2 py-0.5 text-[10px] font-semibold capitalize text-[var(--ops-muted-strong)]">
-                  {ticket.priority}
-                </span>
-                {agent ? (
-                  <span className={cn('rounded-full border px-2 py-0.5 text-[10px] font-semibold', agent.className)} title={agent.title}>
-                    {agent.label}
-                  </span>
-                ) : null}
-              </div>
-              <h2 className="mt-2 text-lg font-semibold leading-6 text-[var(--ops-text)]">{ticket.title}</h2>
-              <p className="mt-1 text-sm text-[var(--ops-muted)]">{ticket.company_display_name || ticket.company_name}</p>
-            </div>
-            <button type="button" onClick={onClose} className="rounded-lg p-2 text-[var(--ops-muted)] hover:bg-[var(--ops-surface-subtle)]">
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
+  const isEditing = Boolean(draft);
+  const [panel, setPanel] = useState<TicketPanel>('conversation');
+  const solution = useMemo(() => ticketSolution(ticket, comments), [comments, ticket]);
+  const tabOptions: Array<{ id: TicketPanel; label: string; count?: number; icon: ReactNode }> = [
+    { id: 'conversation', label: 'Conversation', count: commentCount(ticket), icon: <MessageSquareText className="h-4 w-4" /> },
+    { id: 'solution', label: 'Solution', count: 1, icon: <FileText className="h-4 w-4" /> },
+    { id: 'files', label: 'Files', count: solution.artifacts.length, icon: <FolderOpen className="h-4 w-4" /> },
+  ];
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <section className="border-b border-[var(--ops-border)] px-5 py-4">
-            <p className="whitespace-pre-wrap text-sm leading-6 text-[var(--ops-muted-strong)]">
-              {ticket.description || 'No details added.'}
-            </p>
-            <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
-              <div className="rounded-lg border border-[var(--ops-border)] bg-[var(--ops-bg)] px-3 py-2">
-                <p className="font-semibold uppercase tracking-[0.12em] text-[var(--ops-muted)]">Due</p>
-                <p className="mt-1 font-semibold text-[var(--ops-text)]">{formatDate(ticket.due_date)}</p>
-              </div>
-              <div className="rounded-lg border border-[var(--ops-border)] bg-[var(--ops-bg)] px-3 py-2">
-                <p className="font-semibold uppercase tracking-[0.12em] text-[var(--ops-muted)]">Project</p>
-                <p className="mt-1 truncate font-semibold text-[var(--ops-text)]">{ticket.project_title || 'No project'}</p>
-              </div>
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/25 p-3 backdrop-blur-sm sm:p-5">
+      <section className="flex h-[min(52rem,calc(100vh-1.5rem))] w-full max-w-[82rem] flex-col overflow-hidden rounded-lg border border-[var(--ops-border-strong)] bg-[var(--ops-surface)] shadow-[0_26px_80px_-44px_rgba(8,18,35,0.72)] sm:h-[min(52rem,calc(100vh-2.5rem))]">
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--ops-border)] px-4 py-3 sm:px-5">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={cn('rounded-full border px-2 py-1 text-[10px] font-semibold uppercase', priorityClasses[ticket.priority] ?? priorityClasses.normal)}>
+                {priorityLabel(ticket.priority)}
+              </span>
+              <span className="rounded-full border border-[var(--ops-border)] bg-[var(--ops-surface-subtle)] px-2 py-1 text-[10px] font-semibold uppercase text-[var(--ops-muted)]">
+                {ticket.bucket_name}
+              </span>
               {agent ? (
-                <div className="col-span-2 rounded-lg border border-[var(--ops-border)] bg-[var(--ops-bg)] px-3 py-2">
-                  <p className="font-semibold uppercase tracking-[0.12em] text-[var(--ops-muted)]">Hermes router</p>
-                  <p className="mt-1 font-semibold text-[var(--ops-text)]">{agent.label}</p>
-                  {ticket.agent_last_error ? <p className="mt-1 line-clamp-2 text-[var(--ops-danger-ink)]">{ticket.agent_last_error}</p> : null}
-                </div>
+                <span className={cn('rounded-full border px-2 py-1 text-[10px] font-semibold uppercase', agent.className)} title={agent.title}>
+                  {agent.label}
+                </span>
               ) : null}
             </div>
-          </section>
-
-          <section className="border-b border-[var(--ops-border)] px-5 py-4">
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--ops-text)]">
-              <Files className="h-4 w-4 text-[var(--ops-brand)]" />
-              Files
-            </div>
-            <div className="rounded-lg border border-dashed border-[var(--ops-border)] bg-[var(--ops-bg)] px-4 py-5 text-center text-sm text-[var(--ops-muted)]">
-              No files
-            </div>
-          </section>
-
-          <section className="px-5 py-4">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm font-semibold text-[var(--ops-text)]">
-                <MessageSquareText className="h-4 w-4 text-[var(--ops-brand)]" />
-                Conversation
-              </div>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin text-[var(--ops-muted)]" /> : null}
-            </div>
-            {error ? (
-              <div className="mb-3 rounded-lg border border-[var(--ops-danger-soft-border)] bg-[var(--ops-danger-soft)] px-3 py-2 text-sm text-[var(--ops-danger-ink)]">
-                {error}
-              </div>
-            ) : null}
-            <div className="space-y-3">
-              {comments.length ? (
-                comments.map((comment) => (
-                  <article key={comment.id} className="rounded-lg border border-[var(--ops-border)] bg-white px-3 py-3">
-                    <p className="whitespace-pre-wrap text-sm leading-6 text-[var(--ops-text)]">{comment.body}</p>
-                    <div className="mt-3 flex items-center justify-between gap-3 text-xs text-[var(--ops-muted)]">
-                      <span className="font-semibold text-[var(--ops-muted-strong)]">{comment.author_name || comment.author_email || 'WNY Automation'}</span>
-                      <span>{formatDateTime(comment.created_at)}</span>
-                    </div>
-                  </article>
-                ))
-              ) : (
-                <div className="rounded-lg border border-dashed border-[var(--ops-border)] bg-[var(--ops-bg)] px-4 py-6 text-center text-sm text-[var(--ops-muted)]">
-                  No comments
-                </div>
-              )}
-            </div>
-          </section>
-        </div>
-
-        <div className="shrink-0 border-t border-[var(--ops-border)] bg-[var(--ops-surface)] p-5">
-          <textarea
-            value={commentBody}
-            onChange={(event) => onCommentBodyChange(event.target.value)}
-            placeholder="Write a comment..."
-            maxLength={4000}
-            className="min-h-24 w-full resize-none rounded-lg border border-[var(--ops-border-strong)] bg-white px-3 py-3 text-sm outline-none focus:border-[var(--ops-brand)]"
-          />
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <span className="text-xs text-[var(--ops-muted)]">{commentBody.trim().length.toLocaleString()} / 4,000</span>
+            <h2 className="mt-2 line-clamp-2 text-xl font-semibold leading-7 text-[var(--ops-text)] sm:text-2xl">{ticket.title}</h2>
+            <p className="mt-1 text-sm text-[var(--ops-muted)]">
+              {ticket.company_display_name || ticket.company_name} · Updated {formatDateTime(ticket.updated_at)}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {isEditing ? (
+              <>
+                <button
+                  type="button"
+                  onClick={onCancelEdit}
+                  disabled={updating}
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--ops-border)] bg-white px-3 text-sm font-semibold text-[var(--ops-text)] hover:bg-[var(--ops-surface-subtle)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={onUpdate}
+                  disabled={updating || !draft?.title.trim() || !draft?.bucketId}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[var(--ops-brand)] px-3 text-sm font-semibold text-white hover:bg-[var(--ops-brand-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Edit3 className="h-4 w-4" />}
+                  <span className="hidden sm:inline">{updating ? 'Saving' : 'Save'}</span>
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={onEdit}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[var(--ops-border)] bg-white px-3 text-sm font-semibold text-[var(--ops-text)] hover:bg-[var(--ops-surface-subtle)]"
+              >
+                <Edit3 className="h-4 w-4" />
+                <span className="hidden sm:inline">Edit</span>
+              </button>
+            )}
             <button
               type="button"
-              onClick={onPostComment}
-              disabled={postingComment || !commentBody.trim()}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[var(--ops-brand)] px-4 text-sm font-semibold text-white hover:bg-[var(--ops-brand-strong)] disabled:pointer-events-none disabled:opacity-50"
+              onClick={onDelete}
+              disabled={deleting}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--ops-danger-soft-border)] bg-[var(--ops-danger-soft)] text-[var(--ops-danger-ink)] hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Delete ticket"
             >
-              {postingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              Send
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            </button>
+            <button type="button" onClick={onClose} className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--ops-border)] text-[var(--ops-muted)] hover:bg-[var(--ops-surface-subtle)]">
+              <X className="h-4 w-4" />
             </button>
           </div>
         </div>
-      </aside>
+
+        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(20rem,0.78fr)_minmax(0,1.22fr)]">
+          <aside className="min-h-0 overflow-y-auto border-b border-[var(--ops-border)] bg-[var(--ops-surface)] px-4 py-4 lg:border-b-0 lg:border-r sm:px-5">
+            {draft ? (
+              <form
+                className="space-y-4"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  onUpdate();
+                }}
+              >
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--ops-muted)]">Edit ticket</p>
+                  <h3 className="mt-1 text-lg font-semibold text-[var(--ops-text)]">Ticket details</h3>
+                </div>
+
+                <label className="block">
+                  <span className="mb-2 block text-sm font-semibold text-[var(--ops-text)]">Status</span>
+                  <select
+                    value={draft.bucketId}
+                    onChange={(event) => onDraftChange({ ...draft, bucketId: event.target.value })}
+                    className="h-11 w-full rounded-lg border border-[var(--ops-border)] bg-white px-3 text-sm text-[var(--ops-text)] outline-none focus:border-[var(--ops-brand)] focus:ring-4 focus:ring-[rgba(47,107,79,0.14)]"
+                  >
+                    {buckets.map((bucket) => (
+                      <option key={bucket.id} value={bucket.id}>
+                        {bucket.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 block text-sm font-semibold text-[var(--ops-text)]">Name</span>
+                  <input
+                    value={draft.title}
+                    onChange={(event) => onDraftChange({ ...draft, title: event.target.value.slice(0, 160) })}
+                    className="h-11 w-full rounded-lg border border-[var(--ops-border)] bg-white px-3 text-sm text-[var(--ops-text)] outline-none focus:border-[var(--ops-brand)] focus:ring-4 focus:ring-[rgba(47,107,79,0.14)]"
+                  />
+                  <span className="mt-1 block text-xs text-[var(--ops-muted)]">{draft.title.trim().length}/160</span>
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 block text-sm font-semibold text-[var(--ops-text)]">Date Needed Done By</span>
+                  <input
+                    type="date"
+                    value={draft.dueDate}
+                    onChange={(event) => onDraftChange({ ...draft, dueDate: event.target.value })}
+                    className="h-11 w-full rounded-lg border border-[var(--ops-border)] bg-white px-3 text-sm text-[var(--ops-text)] outline-none focus:border-[var(--ops-brand)] focus:ring-4 focus:ring-[rgba(47,107,79,0.14)]"
+                  />
+                </label>
+
+                <div>
+                  <p className="mb-2 text-sm font-semibold text-[var(--ops-text)]">Urgency</p>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                    {(['low', 'normal', 'high', 'urgent'] as const).map((priority) => (
+                      <button
+                        key={priority}
+                        type="button"
+                        onClick={() => onDraftChange({ ...draft, priority })}
+                        className={cn(
+                          'rounded-lg border px-3 py-3 text-left transition',
+                          draft.priority === priority
+                            ? priorityClasses[priority]
+                            : 'border-[var(--ops-border)] bg-white text-[var(--ops-text)] hover:bg-[var(--ops-surface-subtle)]',
+                        )}
+                      >
+                        <span className="block text-sm font-semibold">{priorityLabel(priority)}</span>
+                        <span className="mt-1 block text-xs opacity-80">
+                          {priority === 'low' ? 'Nice to have' : priority === 'normal' ? 'Standard work' : priority === 'high' ? 'Needs focus' : 'Time sensitive'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <label className="block">
+                  <span className="mb-2 block text-sm font-semibold text-[var(--ops-text)]">Description</span>
+                  <textarea
+                    value={draft.description}
+                    onChange={(event) => onDraftChange({ ...draft, description: event.target.value.slice(0, 4000) })}
+                    rows={8}
+                    className="w-full resize-none rounded-lg border border-[var(--ops-border)] bg-white px-3 py-2 text-sm leading-6 text-[var(--ops-text)] outline-none focus:border-[var(--ops-brand)] focus:ring-4 focus:ring-[rgba(47,107,79,0.14)]"
+                  />
+                  <span className="mt-1 block text-xs text-[var(--ops-muted)]">{draft.description.trim().length}/4000</span>
+                </label>
+
+                {error ? (
+                  <div className="rounded-lg border border-[var(--ops-danger-soft-border)] bg-[var(--ops-danger-soft)] px-3 py-2 text-sm text-[var(--ops-danger-ink)]">
+                    {error}
+                  </div>
+                ) : null}
+              </form>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <DetailPill label="Due date" value={formatDate(ticket.due_date)} icon={<CalendarDays className="h-4 w-4" />} />
+                  <DetailPill label="Comments" value={String(commentCount(ticket))} icon={<MessageSquareText className="h-4 w-4" />} />
+                  <DetailPill label="Project" value={ticket.project_title || 'None'} icon={<CheckCircle2 className="h-4 w-4" />} />
+                  <DetailPill label="Files" value={solution.artifacts.length ? String(solution.artifacts.length) : 'None'} icon={<Files className="h-4 w-4" />} />
+                </div>
+
+                <section className="mt-4 rounded-lg border border-[var(--ops-border)] bg-white px-4 py-3">
+                  <h3 className="text-sm font-semibold text-[var(--ops-text)]">Details</h3>
+                  {ticket.description ? (
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--ops-muted-strong)]">{ticket.description}</p>
+                  ) : (
+                    <p className="mt-2 text-sm text-[var(--ops-muted)]">No details yet.</p>
+                  )}
+                </section>
+
+                <section className="mt-4 rounded-lg border border-[var(--ops-border)] bg-white px-4 py-3">
+                  <h3 className="text-sm font-semibold text-[var(--ops-text)]">Requester</h3>
+                  <p className="mt-2 truncate text-sm text-[var(--ops-muted-strong)]">{ticket.requester_email || ticket.company_email || 'No requester email'}</p>
+                </section>
+              </>
+            )}
+          </aside>
+
+          <section className="flex min-h-0 flex-1 flex-col bg-[var(--ops-surface-subtle)]">
+            <div className="border-b border-[var(--ops-border)] bg-[var(--ops-surface)] px-4 py-3 sm:px-5">
+              <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-[var(--ops-text)]">
+                    {panel === 'conversation' ? 'Ticket conversation' : panel === 'solution' ? 'Solution report' : 'Ticket files'}
+                  </h3>
+                  <p className="text-xs text-[var(--ops-muted)]">
+                    {panel === 'conversation'
+                      ? `${commentCount(ticket).toLocaleString()} admin/client updates`
+                      : panel === 'solution'
+                        ? solution.label
+                        : solution.artifacts.length ? `${solution.artifacts.length.toLocaleString()} linked artifacts` : 'No linked files yet'}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {tabOptions.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setPanel(tab.id)}
+                      className={cn(
+                        'inline-flex h-9 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-semibold transition',
+                        panel === tab.id
+                          ? 'border-[var(--ops-brand-soft-border)] bg-[var(--ops-brand-soft)] text-[var(--ops-brand)]'
+                          : 'border-[var(--ops-border)] bg-white text-[var(--ops-muted)] hover:text-[var(--ops-text)]',
+                      )}
+                    >
+                      {tab.icon}
+                      {tab.label}
+                      {tab.count ? (
+                        <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] text-[var(--ops-muted)]">{tab.count}</span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+              {loading ? (
+                <div className="flex h-full items-center justify-center rounded-lg border border-[var(--ops-border)] bg-white text-sm text-[var(--ops-muted)]">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Loading ticket
+                </div>
+              ) : panel === 'conversation' ? (
+                <>
+                  {error ? (
+                    <div className="mb-3 rounded-lg border border-[var(--ops-danger-soft-border)] bg-[var(--ops-danger-soft)] px-3 py-2 text-sm text-[var(--ops-danger-ink)]">
+                      {error}
+                    </div>
+                  ) : null}
+                  {comments.length === 0 ? (
+                    <div className="flex h-full min-h-[16rem] items-center justify-center rounded-lg border border-dashed border-[var(--ops-border-strong)] bg-white text-sm text-[var(--ops-muted)]">
+                      No updates yet
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {comments.map((comment) => {
+                        const author = comment.author_name || comment.author_email || 'Team member';
+                        const initials = author
+                          .split(/\s+/)
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .map((part) => part[0]?.toUpperCase())
+                          .join('') || 'A';
+                        const isStaff = comment.author_role === 'staff' || comment.author_role === 'admin' || comment.author_role === 'super_admin';
+                        return (
+                          <article key={comment.id} className={cn('flex gap-3', isStaff && 'justify-end')}>
+                            {!isStaff ? (
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--ops-brand)] text-xs font-semibold text-white">
+                                {initials}
+                              </div>
+                            ) : null}
+                            <div className={cn('max-w-[min(42rem,92%)] rounded-lg border px-4 py-3 shadow-[var(--ops-shadow-soft)]', isStaff ? 'border-[var(--ops-brand-soft-border)] bg-white' : 'border-[var(--ops-border)] bg-white')}>
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <p className="text-sm font-semibold text-[var(--ops-text)]">{author}</p>
+                                <p className="text-xs text-[var(--ops-muted)]">{comment.author_role.replace('_', ' ')} · {formatDateTime(comment.created_at)}</p>
+                              </div>
+                              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--ops-muted-strong)]">{comment.body}</p>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              ) : panel === 'solution' ? (
+                <SolutionPanel solution={solution} ticket={ticket} />
+              ) : (
+                <FilesPanel artifacts={solution.artifacts} />
+              )}
+            </div>
+
+            {panel === 'conversation' ? (
+              <div className="border-t border-[var(--ops-border)] bg-[var(--ops-surface)] px-4 py-3 sm:px-5">
+                <textarea
+                  value={commentBody}
+                  onChange={(event) => onCommentBodyChange(event.target.value.slice(0, 4000))}
+                  placeholder="Write an admin/client update"
+                  className="min-h-[6rem] w-full resize-none rounded-lg border border-[var(--ops-border)] bg-white px-3 py-2 text-sm text-[var(--ops-text)] outline-none focus:border-[var(--ops-brand)] focus:ring-4 focus:ring-[rgba(47,107,79,0.14)]"
+                />
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <span className="text-xs text-[var(--ops-muted)]">{commentBody.length}/4000</span>
+                  <button
+                    type="button"
+                    onClick={onPostComment}
+                    disabled={postingComment || !commentBody.trim()}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--ops-brand)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {postingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    Add update
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </section>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function SolutionPanel({ solution, ticket }: { solution: TicketSolution; ticket: Ticket }) {
+  return (
+    <article className="rounded-lg border border-[var(--ops-border)] bg-white shadow-[var(--ops-shadow-soft)]">
+      <div className="border-b border-[var(--ops-border)] px-4 py-3 sm:px-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={cn(
+                  'rounded-full border px-2 py-1 text-[10px] font-semibold uppercase',
+                  solution.status === 'ready'
+                    ? 'border-[var(--ops-success-soft-border)] bg-[var(--ops-success-soft)] text-[var(--ops-success-ink)]'
+                    : solution.status === 'draft'
+                      ? 'border-[var(--ops-warning-soft-border)] bg-[var(--ops-warning-soft)] text-[var(--ops-warning-ink)]'
+                      : 'border-[var(--ops-sky-soft-border)] bg-[var(--ops-sky-soft)] text-[var(--ops-sky-ink)]',
+                )}
+              >
+                {solution.label}
+              </span>
+              <span className="rounded-full border border-[var(--ops-border)] bg-[var(--ops-surface-subtle)] px-2 py-1 text-[10px] font-semibold uppercase text-[var(--ops-muted)]">
+                {ticket.bucket_name}
+              </span>
+            </div>
+            <h3 className="mt-3 text-lg font-semibold text-[var(--ops-text)]">Solution for {ticket.title}</h3>
+            {solution.updatedAt ? <p className="mt-1 text-xs text-[var(--ops-muted)]">Updated {formatDateTime(solution.updatedAt)}</p> : null}
+          </div>
+        </div>
+      </div>
+
+      <div className="px-4 py-4 sm:px-5">
+        <div className="rounded-lg border border-[var(--ops-border)] bg-[var(--ops-surface-subtle)] px-4 py-4">
+          <p className="whitespace-pre-wrap text-sm leading-6 text-[var(--ops-text)]">{solution.body}</p>
+        </div>
+
+        {solution.artifacts.length ? (
+          <div className="mt-4">
+            <h4 className="text-sm font-semibold text-[var(--ops-text)]">Linked deliverables</h4>
+            <p className="mt-1 text-xs text-[var(--ops-muted)]">These files support the written summary above.</p>
+            <div className="mt-2 grid gap-2">
+              {solution.artifacts.map((artifact) => (
+                <ArtifactRow key={artifact.id} artifact={artifact} />
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function FilesPanel({ artifacts }: { artifacts: TicketArtifact[] }) {
+  if (artifacts.length === 0) {
+    return (
+      <div className="flex h-full min-h-[18rem] items-center justify-center rounded-lg border border-dashed border-[var(--ops-border-strong)] bg-white px-6 text-center">
+        <div className="max-w-md">
+          <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-lg border border-[var(--ops-sky-soft-border)] bg-[var(--ops-sky-soft)] text-[var(--ops-sky-ink)]">
+            <FolderOpen className="h-5 w-5" />
+          </div>
+          <h3 className="mt-3 text-base font-semibold text-[var(--ops-text)]">No files linked yet</h3>
+          <p className="mt-2 text-sm leading-6 text-[var(--ops-muted)]">
+            Google Drive folders, Docs, Sheets, PDFs, and other deliverables will be listed here once they are attached to the ticket result.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {artifacts.map((artifact) => (
+        <ArtifactRow key={artifact.id} artifact={artifact} />
+      ))}
+    </div>
+  );
+}
+
+function ArtifactRow({ artifact }: { artifact: TicketArtifact }) {
+  const isUrl = artifact.kind === 'drive' || artifact.kind === 'url';
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--ops-border)] bg-white px-3 py-3 shadow-[var(--ops-shadow-soft)]">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--ops-border)] bg-[var(--ops-surface-subtle)] text-[var(--ops-muted)]">
+          {artifact.kind === 'drive' ? <FolderOpen className="h-4 w-4" /> : <Files className="h-4 w-4" />}
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-[var(--ops-text)]">{artifact.label}</p>
+          <p className="truncate text-xs text-[var(--ops-muted)]">
+            {artifact.kind === 'drive' ? 'Google Drive link' : artifact.kind === 'url' ? 'External link' : artifact.href}
+          </p>
+        </div>
+      </div>
+      {isUrl ? (
+        <a
+          href={artifact.href}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-[var(--ops-border)] bg-white px-3 text-sm font-semibold text-[var(--ops-text)] hover:bg-[var(--ops-surface-subtle)]"
+        >
+          Open
+        </a>
+      ) : (
+        <span className="shrink-0 rounded-full bg-[var(--ops-surface-subtle)] px-2 py-1 text-[10px] font-semibold uppercase text-[var(--ops-muted)]">
+          Local
+        </span>
+      )}
+    </div>
+  );
+}
+
+function DetailPill({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
+  return (
+    <div className="rounded-lg border border-[var(--ops-border)] bg-white px-3 py-3">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase text-[var(--ops-muted)]">
+        {icon}
+        {label}
+      </div>
+      <div className="mt-1 truncate text-sm font-semibold text-[var(--ops-text)]">{value}</div>
     </div>
   );
 }

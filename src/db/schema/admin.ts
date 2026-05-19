@@ -70,3 +70,32 @@ export const adminTicketComments = pgTable(
     companyCreatedIdx: index('idx_admin_ticket_comments_company_created').on(t.companyId, t.createdAt),
   }),
 );
+
+export const ticketAgentEvents = pgTable(
+  'ticket_agent_events',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    ticketId: uuid('ticket_id')
+      .notNull()
+      .references(() => adminTickets.id, { onDelete: 'cascade' }),
+    companyId: uuid('company_id')
+      .notNull()
+      .references(() => companies.id, { onDelete: 'cascade' }),
+    eventType: text('event_type').notNull(),
+    idempotencyKey: text('idempotency_key').notNull().unique(),
+    deliveryStatus: text('delivery_status').notNull().default('pending'),
+    attemptCount: integer('attempt_count').notNull().default(0),
+    payloadJson: text('payload_json').notNull(),
+    lastError: text('last_error'),
+    routerResponseJson: text('router_response_json'),
+    deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    statusIdx: index('idx_ticket_agent_events_status').on(t.deliveryStatus, t.nextAttemptAt, t.createdAt),
+    ticketIdx: index('idx_ticket_agent_events_ticket').on(t.ticketId, t.createdAt),
+    companyIdx: index('idx_ticket_agent_events_company').on(t.companyId, t.createdAt),
+  }),
+);

@@ -11,6 +11,7 @@ const EXPECTED_TABLES = [
   'unassigned_portal_users',
   'admin_ticket_buckets',
   'admin_tickets',
+  'ticket_agent_events',
   'crm_companies',
   'crm_contacts',
   'crm_sync_runs',
@@ -32,6 +33,9 @@ const RLS_AUDIT_TABLES = [
   'estimates',
   'payments',
   'service_contracts',
+  'admin_tickets',
+  'admin_ticket_comments',
+  'ticket_agent_events',
 ];
 
 function stableFingerprint(input: string) {

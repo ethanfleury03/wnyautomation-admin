@@ -23,6 +23,7 @@ const checks = [
   ['admin_ticket_buckets', /CREATE TABLE IF NOT EXISTS "admin_ticket_buckets"/],
   ['admin_tickets', /CREATE TABLE IF NOT EXISTS "admin_tickets"/],
   ['admin_ticket_comments', /CREATE TABLE IF NOT EXISTS "admin_ticket_comments"/],
+  ['ticket_agent_events', /CREATE TABLE IF NOT EXISTS "ticket_agent_events"/],
   ['crm_companies', /CREATE TABLE IF NOT EXISTS "crm_companies"/],
   ['crm_contacts', /CREATE TABLE IF NOT EXISTS "crm_contacts"/],
   ['crm_sync_runs', /CREATE TABLE IF NOT EXISTS "crm_sync_runs"/],

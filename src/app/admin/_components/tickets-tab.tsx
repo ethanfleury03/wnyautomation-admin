@@ -85,6 +85,11 @@ type Ticket = {
   comment_count: number | string;
   latest_comment_body: string | null;
   latest_comment_at: string | null;
+  agent_delivery_status: 'pending' | 'delivered' | 'failed' | null;
+  agent_event_type: string | null;
+  agent_attempt_count: number | string;
+  agent_last_error: string | null;
+  agent_delivered_at: string | null;
 };
 
 type TicketComment = {
@@ -220,6 +225,30 @@ function formatDateTime(value: string | null | undefined) {
 
 function commentCount(ticket: Ticket) {
   return Number(ticket.comment_count || 0);
+}
+
+function agentStatus(ticket: Ticket) {
+  if (!ticket.agent_delivery_status) return null;
+  const attempts = Number(ticket.agent_attempt_count || 0);
+  if (ticket.agent_delivery_status === 'delivered') {
+    return {
+      label: 'Hermes sent',
+      title: ticket.agent_delivered_at ? `Sent ${formatDateTime(ticket.agent_delivered_at)}` : 'Sent to Hermes',
+      className: 'border-[var(--ops-success-soft-border)] bg-[var(--ops-success-soft)] text-[var(--ops-success-ink)]',
+    };
+  }
+  if (ticket.agent_delivery_status === 'failed') {
+    return {
+      label: 'Hermes failed',
+      title: ticket.agent_last_error || `Delivery failed after ${attempts.toLocaleString()} attempt${attempts === 1 ? '' : 's'}`,
+      className: 'border-[var(--ops-danger-soft-border)] bg-[var(--ops-danger-soft)] text-[var(--ops-danger-ink)]',
+    };
+  }
+  return {
+    label: 'Hermes queued',
+    title: attempts > 0 ? `Queued after ${attempts.toLocaleString()} attempt${attempts === 1 ? '' : 's'}` : 'Queued for Hermes',
+    className: 'border-[var(--ops-warning-soft-border)] bg-[var(--ops-warning-soft)] text-[var(--ops-warning-ink)]',
+  };
 }
 
 function isDoneBucket(bucket: Bucket | undefined) {
@@ -950,6 +979,7 @@ function TicketCard({
     opacity: isDragging ? 0.55 : 1,
   };
   const clientName = ticket.company_display_name || ticket.company_name;
+  const agent = agentStatus(ticket);
   return (
     <article
       ref={setNodeRef}
@@ -978,6 +1008,11 @@ function TicketCard({
             <span className={cn('rounded-full border px-2 py-1 text-xs font-semibold capitalize', priorityClasses[ticket.priority])}>
               {ticket.priority}
             </span>
+            {agent ? (
+              <span className={cn('rounded-full border px-2 py-1 text-xs font-semibold', agent.className)} title={agent.title}>
+                {agent.label}
+              </span>
+            ) : null}
           </div>
         </div>
         <div className="flex shrink-0 gap-1">
@@ -1064,6 +1099,7 @@ function TicketConversationPanel({
   onCommentBodyChange: (value: string) => void;
   onPostComment: () => void;
 }) {
+  const agent = agentStatus(ticket);
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/30">
       <aside className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col overflow-hidden bg-[var(--ops-surface)] shadow-2xl">
@@ -1077,6 +1113,11 @@ function TicketConversationPanel({
                 <span className="rounded-full bg-[var(--ops-surface-subtle)] px-2 py-0.5 text-[10px] font-semibold capitalize text-[var(--ops-muted-strong)]">
                   {ticket.priority}
                 </span>
+                {agent ? (
+                  <span className={cn('rounded-full border px-2 py-0.5 text-[10px] font-semibold', agent.className)} title={agent.title}>
+                    {agent.label}
+                  </span>
+                ) : null}
               </div>
               <h2 className="mt-2 text-lg font-semibold leading-6 text-[var(--ops-text)]">{ticket.title}</h2>
               <p className="mt-1 text-sm text-[var(--ops-muted)]">{ticket.company_display_name || ticket.company_name}</p>
@@ -1101,6 +1142,13 @@ function TicketConversationPanel({
                 <p className="font-semibold uppercase tracking-[0.12em] text-[var(--ops-muted)]">Project</p>
                 <p className="mt-1 truncate font-semibold text-[var(--ops-text)]">{ticket.project_title || 'No project'}</p>
               </div>
+              {agent ? (
+                <div className="col-span-2 rounded-lg border border-[var(--ops-border)] bg-[var(--ops-bg)] px-3 py-2">
+                  <p className="font-semibold uppercase tracking-[0.12em] text-[var(--ops-muted)]">Hermes router</p>
+                  <p className="mt-1 font-semibold text-[var(--ops-text)]">{agent.label}</p>
+                  {ticket.agent_last_error ? <p className="mt-1 line-clamp-2 text-[var(--ops-danger-ink)]">{ticket.agent_last_error}</p> : null}
+                </div>
+              ) : null}
             </div>
           </section>
 

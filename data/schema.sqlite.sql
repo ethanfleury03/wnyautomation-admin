@@ -226,6 +226,23 @@ CREATE TABLE IF NOT EXISTS admin_ticket_comments (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS ticket_agent_events (
+  id TEXT PRIMARY KEY DEFAULT (uuid()) NOT NULL,
+  ticket_id TEXT NOT NULL REFERENCES admin_tickets(id) ON DELETE CASCADE,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  delivery_status TEXT NOT NULL DEFAULT 'pending',
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  payload_json TEXT NOT NULL,
+  last_error TEXT,
+  router_response_json TEXT,
+  delivered_at TEXT,
+  next_attempt_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY DEFAULT (uuid()) NOT NULL,
   company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
@@ -324,6 +341,12 @@ CREATE INDEX IF NOT EXISTS idx_admin_ticket_comments_ticket_created
   ON admin_ticket_comments(ticket_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_admin_ticket_comments_company_created
   ON admin_ticket_comments(company_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_ticket_agent_events_status
+  ON ticket_agent_events(delivery_status, next_attempt_at, created_at);
+CREATE INDEX IF NOT EXISTS idx_ticket_agent_events_ticket
+  ON ticket_agent_events(ticket_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_ticket_agent_events_company
+  ON ticket_agent_events(company_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_company_id ON jobs(company_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_customer_id ON jobs(customer_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_lead_id ON jobs(lead_id);

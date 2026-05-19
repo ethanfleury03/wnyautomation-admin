@@ -83,6 +83,24 @@ export async function GET() {
     ORDER BY t.sort_order ASC, t.updated_at DESC
   `;
 
+  let agentEvents: Record<string, unknown>[] = [];
+  try {
+    agentEvents = await sql`
+      SELECT e.*
+      FROM ticket_agent_events e
+      JOIN (
+        SELECT ticket_id, MAX(created_at) AS latest_created_at
+        FROM ticket_agent_events
+        GROUP BY ticket_id
+      ) latest
+        ON latest.ticket_id = e.ticket_id
+       AND latest.latest_created_at = e.created_at
+    `;
+  } catch (error) {
+    console.warn('[admin-ticket-board] ticket_agent_events unavailable', error);
+  }
+  const agentEventByTicket = new Map(agentEvents.map((event) => [String(event.ticket_id), event]));
+
   return NextResponse.json({
     buckets,
     tenants,
@@ -90,6 +108,16 @@ export async function GET() {
       ...project,
       payload: parsePayloadJson(project.payload_json),
     })),
-    tickets,
+    tickets: tickets.map((ticket) => {
+      const event = agentEventByTicket.get(String(ticket.id));
+      return {
+        ...ticket,
+        agent_delivery_status: event?.delivery_status || null,
+        agent_event_type: event?.event_type || null,
+        agent_attempt_count: event?.attempt_count || 0,
+        agent_last_error: event?.last_error || null,
+        agent_delivered_at: event?.delivered_at || null,
+      };
+    }),
   });
 }

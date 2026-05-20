@@ -62,15 +62,15 @@ export default function WebhookFailuresPage() {
   }
 
   return (
-    <div className="p-6">
-      <header className="mb-6 flex items-center justify-between">
+    <div className="min-h-[100dvh] bg-slate-50 p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] lg:p-6">
+      <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Webhook dead-letter queue</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Stripe (and other provider) webhooks that failed after delivery attempts.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <label className="inline-flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -100,7 +100,8 @@ export default function WebhookFailuresPage() {
           <Loader2 className="size-4 animate-spin" /> Loading…
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border bg-white">
+        <>
+        <div className="hidden overflow-x-auto rounded-lg border bg-white md:block">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left">
               <tr>
@@ -157,6 +158,52 @@ export default function WebhookFailuresPage() {
             </tbody>
           </table>
         </div>
+        <div className="grid gap-3 md:hidden">
+          {rows.map((r) => (
+            <article key={`${r.id}-mobile`} className={`rounded-lg border bg-white p-4 shadow-sm ${r.resolved_at ? 'opacity-60' : ''}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="truncate text-base font-semibold">{r.event_type || '(unknown event)'}</h2>
+                  <p className="mt-1 text-xs text-slate-500">{new Date(r.created_at).toLocaleString()}</p>
+                </div>
+                <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{r.provider}</span>
+              </div>
+              <dl className="mt-3 grid gap-2 text-sm">
+                <div>
+                  <dt className="text-xs font-semibold uppercase text-slate-500">Company</dt>
+                  <dd className="break-all font-mono text-xs">{r.company_id || '—'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold uppercase text-slate-500">Attempts</dt>
+                  <dd>{r.attempt_count}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold uppercase text-slate-500">Error</dt>
+                  <dd className="break-words text-red-700">{r.error_message}</dd>
+                </div>
+              </dl>
+              {!r.resolved_at ? (
+                <button
+                  type="button"
+                  onClick={() => replay(r)}
+                  disabled={busyId === r.id}
+                  className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border px-3 text-sm font-semibold hover:bg-gray-50 disabled:opacity-60"
+                >
+                  <PlayCircle className="size-4" />
+                  {busyId === r.id ? 'Replaying…' : 'Replay'}
+                </button>
+              ) : (
+                <span className="mt-3 inline-flex text-xs font-semibold text-emerald-700">Resolved</span>
+              )}
+            </article>
+          ))}
+          {rows.length === 0 ? (
+            <div className="rounded-lg border border-dashed bg-white p-6 text-center text-sm text-muted-foreground">
+              {showResolved ? 'No resolved failures.' : 'Queue is empty.'}
+            </div>
+          ) : null}
+        </div>
+        </>
       )}
     </div>
   );

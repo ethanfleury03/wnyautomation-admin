@@ -485,7 +485,7 @@ export default function AdminTenantPage({ params }: { params: Promise<{ id: stri
               </div>
             </Panel>
             <Panel title="Tenant users">
-              <div className="overflow-x-auto">
+              <div className="hidden overflow-x-auto md:block">
                 <table className="w-full min-w-[680px] text-sm">
                   <thead className="text-left text-xs uppercase text-slate-500">
                     <tr>
@@ -524,6 +524,33 @@ export default function AdminTenantPage({ params }: { params: Promise<{ id: stri
                     ) : null}
                   </tbody>
                 </table>
+              </div>
+              <div className="grid gap-3 md:hidden">
+                {users.length ? (
+                  users.map((user) => (
+                    <article key={`${user.id}-mobile`} className="rounded-lg border border-slate-200 bg-white p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="truncate text-sm font-semibold text-slate-950">{user.name || user.email}</h3>
+                          <p className="truncate text-xs text-slate-500">{user.email}</p>
+                        </div>
+                        <span className={`rounded-full px-2 py-1 text-xs font-medium ${active(user.is_active) ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                          {active(user.is_active) ? 'active' : 'inactive'}
+                        </span>
+                      </div>
+                      <div className="mt-3 grid gap-2">
+                        <select value={user.role} onChange={(e) => updateUser(user.id, { role: e.target.value })} className="h-10 rounded-md border border-slate-300 px-2 text-sm">
+                          {roles.map((role) => <option key={role} value={role}>{role}</option>)}
+                        </select>
+                        <button onClick={() => updateUser(user.id, { isActive: !active(user.is_active) })} className="min-h-10 rounded-md border border-slate-200 px-3 text-xs font-medium text-slate-600 hover:bg-slate-100">
+                          {active(user.is_active) ? 'Deactivate' : 'Reactivate'}
+                        </button>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="rounded-lg border border-dashed border-slate-200 p-5 text-center text-sm text-slate-500">No users assigned yet.</div>
+                )}
               </div>
             </Panel>
           </section>

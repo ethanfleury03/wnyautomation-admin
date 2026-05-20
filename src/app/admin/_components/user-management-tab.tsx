@@ -392,7 +392,7 @@ export function UserManagementTab() {
           <div className="text-xs font-medium text-slate-500">{tenants.length} shown</div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[880px] text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
               <tr>
@@ -449,6 +449,50 @@ export function UserManagementTab() {
             </tbody>
           </table>
         </div>
+        <div className="grid gap-3 p-4 md:hidden">
+          {loading && !tenants.length ? (
+            Array.from({ length: 3 }).map((_, idx) => <div key={idx} className="h-28 animate-pulse rounded-lg bg-slate-100" />)
+          ) : tenants.length ? (
+            tenants.map((t) => (
+              <article key={t.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="truncate text-base font-semibold text-slate-950">{t.display_name || t.name}</h3>
+                    <p className="truncate text-sm text-slate-500">{t.email}</p>
+                  </div>
+                  <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
+                    {t.stripe_connect_status || 'active'}
+                  </span>
+                </div>
+                <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                  <div className="rounded-lg bg-slate-50 p-2">
+                    <dt className="text-xs font-semibold uppercase text-slate-500">Users</dt>
+                    <dd className="mt-1 font-semibold text-slate-950">{Number(t.user_count || 0)}</dd>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-2">
+                    <dt className="text-xs font-semibold uppercase text-slate-500">Modules</dt>
+                    <dd className="mt-1 font-semibold text-slate-950">{Number(t.enabled_module_count || 0)}</dd>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-2">
+                    <dt className="text-xs font-semibold uppercase text-slate-500">Revenue</dt>
+                    <dd className="mt-1 font-semibold text-slate-950">{fmtMoney(t.paid_cents)}</dd>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-2">
+                    <dt className="text-xs font-semibold uppercase text-slate-500">Last</dt>
+                    <dd className="mt-1 text-xs font-semibold text-slate-700">{fmtDate(t.last_activity_at)}</dd>
+                  </div>
+                </dl>
+                <Link href={`/admin/tenants/${t.id}`} className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-slate-200 text-sm font-semibold text-slate-700">
+                  Manage portal
+                </Link>
+              </article>
+            ))
+          ) : (
+            <div className="rounded-lg border border-dashed border-slate-200 p-5 text-center text-sm text-slate-500">
+              No portals found. Create the first client CRM when ready.
+            </div>
+          )}
+        </div>
       </section>
 
       <section className="mt-5 rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -470,7 +514,7 @@ export function UserManagementTab() {
             </button>
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[980px] text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
               <tr>
@@ -539,6 +583,41 @@ export function UserManagementTab() {
             </tbody>
           </table>
         </div>
+        <div className="grid gap-3 p-4 md:hidden">
+          {loading && !portalUsers.length ? (
+            Array.from({ length: 3 }).map((_, idx) => <div key={idx} className="h-24 animate-pulse rounded-lg bg-slate-100" />)
+          ) : portalUsers.length ? (
+            portalUsers.map((user) => (
+              <article key={`${user.id}-${user.membership_id || user.company_id || 'none'}-mobile`} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="truncate text-base font-semibold text-slate-950">{user.name || user.email}</h3>
+                    <p className="truncate text-sm text-slate-500">{user.email}</p>
+                  </div>
+                  <span className={`rounded-full px-2 py-1 text-xs font-medium ${active(user.is_active) ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                    {active(user.is_active) ? 'active' : 'inactive'}
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-2 text-sm text-slate-600">
+                  <p><span className="font-semibold text-slate-950">Portal:</span> {user.company_display_name || user.company_name || 'Unassigned'}</p>
+                  <p><span className="font-semibold text-slate-950">Role:</span> {roleLabel(user.role || 'staff')}</p>
+                  <p><span className="font-semibold text-slate-950">Clerk:</span> {user.clerk_user_id ? 'Linked' : 'Email only'}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openEditPortalUser(user)}
+                  className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 text-sm font-semibold text-slate-700"
+                >
+                  <Pencil className="h-4 w-4" /> Edit user
+                </button>
+              </article>
+            ))
+          ) : (
+            <div className="rounded-lg border border-dashed border-slate-200 p-5 text-center text-sm text-slate-500">
+              No portal users found. Add the first contact when ready.
+            </div>
+          )}
+        </div>
       </section>
 
       <section className="mt-5 rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -597,8 +676,8 @@ export function UserManagementTab() {
 
       {portalUserPanelOpen ? (
         <div className="fixed inset-0 z-50 bg-slate-950/30">
-          <div className="absolute right-0 top-0 h-full w-full max-w-xl overflow-y-auto bg-white shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
+          <div className="absolute right-0 top-0 h-[100dvh] w-full max-w-xl overflow-y-auto bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
               <div>
                 <h2 className="text-lg font-semibold text-slate-950">
                   {portalUserForm.id ? 'Edit portal user' : 'Create portal user'}
@@ -610,7 +689,7 @@ export function UserManagementTab() {
               </button>
             </div>
 
-            <div className="space-y-5 p-5">
+            <div className="space-y-5 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5">
               <div className="grid gap-3 md:grid-cols-2">
                 <Field label="Email" value={portalUserForm.email} onChange={(v) => setPortalUserForm((f) => ({ ...f, email: v }))} required />
                 <Field label="Name" value={portalUserForm.name} onChange={(v) => setPortalUserForm((f) => ({ ...f, name: v }))} />
@@ -680,8 +759,8 @@ export function UserManagementTab() {
 
       {panelOpen ? (
         <div className="fixed inset-0 z-50 bg-slate-950/30">
-          <div className="absolute right-0 top-0 h-full w-full max-w-2xl overflow-y-auto bg-white shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
+          <div className="absolute right-0 top-0 h-[100dvh] w-full max-w-2xl overflow-y-auto bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
               <div>
                 <h2 className="text-lg font-semibold text-slate-950">Create client portal</h2>
                 <p className="text-sm text-slate-500">Set the starting modules, branding seed, and first admin.</p>
@@ -691,7 +770,7 @@ export function UserManagementTab() {
               </button>
             </div>
 
-            <div className="space-y-5 p-5">
+            <div className="space-y-5 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5">
               <div className="grid gap-3 md:grid-cols-2">
                 <Field label="Company name" value={form.name} onChange={(v) => setForm((f) => ({ ...f, name: v }))} required />
                 <Field label="Contact email" value={form.email} onChange={(v) => setForm((f) => ({ ...f, email: v }))} required />

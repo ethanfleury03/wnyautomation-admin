@@ -116,6 +116,20 @@ body {
   background: var(--ops-bg);
   color: var(--foreground);
   font-family: var(--font-app-sans), "Segoe UI", sans-serif;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  overflow-wrap: anywhere;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+input,
+select,
+textarea {
+  font-size: 16px;
 }
 
 .ops-shell {

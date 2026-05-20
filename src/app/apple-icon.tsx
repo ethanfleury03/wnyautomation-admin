@@ -17,14 +17,15 @@ export default function AppleIcon() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          borderRadius: 40,
-          background: 'linear-gradient(180deg, #0b1422 0%, #1f3558 100%)',
-          color: '#f26a1f',
-          fontSize: 110,
+          borderRadius: 38,
+          background: 'linear-gradient(180deg, #10251d 0%, #2f6b4f 100%)',
+          color: '#f5f7f3',
+          fontSize: 64,
           fontWeight: 800,
+          letterSpacing: -4,
         }}
       >
-        P
+        WA
       </div>
     ),
     size,

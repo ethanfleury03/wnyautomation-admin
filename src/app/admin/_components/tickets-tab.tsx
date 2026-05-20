@@ -476,6 +476,7 @@ export function TicketsTab() {
   const [bucketPanelOpen, setBucketPanelOpen] = useState(false);
   const [editingBucket, setEditingBucket] = useState<Bucket | null>(null);
   const [bucketForm, setBucketForm] = useState<BucketFormState>({ name: '', color: '#2f6b4f' });
+  const [mobileBucketId, setMobileBucketId] = useState('all');
 
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor));
 
@@ -506,6 +507,11 @@ export function TicketsTab() {
     }
     return counts;
   }, [filteredTickets]);
+
+  const mobileTickets = useMemo(
+    () => (mobileBucketId === 'all' ? filteredTickets : filteredTickets.filter((ticket) => ticket.bucket_id === mobileBucketId)),
+    [filteredTickets, mobileBucketId],
+  );
 
   const kpis = useMemo(() => {
     const bucketById = new Map(buckets.map((bucket) => [bucket.id, bucket]));
@@ -832,7 +838,7 @@ export function TicketsTab() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--ops-bg)]">
+    <div className="flex min-h-full flex-col bg-[var(--ops-bg)] lg:h-full lg:min-h-0 lg:overflow-hidden">
       <header className="border-b border-[var(--ops-border)] bg-[var(--ops-surface-elevated)] px-4 py-4 lg:px-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
@@ -904,7 +910,56 @@ export function TicketsTab() {
         </div>
       </section>
 
-      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-4 py-4 lg:px-6">
+      <section className="grid gap-3 px-4 py-4 lg:hidden">
+        <div className="flex flex-col gap-3 rounded-lg border border-[var(--ops-border)] bg-[var(--ops-surface)] p-3 shadow-[var(--ops-shadow-soft)]">
+          <label className="grid gap-1 text-sm font-semibold text-[var(--ops-text)]">
+            Bucket
+            <select
+              value={mobileBucketId}
+              onChange={(event) => setMobileBucketId(event.target.value)}
+              className="h-11 rounded-lg border border-[var(--ops-border)] bg-white px-3 text-sm text-[var(--ops-text)] outline-none"
+            >
+              <option value="all">All visible tickets</option>
+              {buckets.map((bucket) => (
+                <option key={bucket.id} value={bucket.id}>
+                  {bucket.name} ({ticketCounts.get(bucket.id) || 0})
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => openCreateTicket(mobileBucketId === 'all' ? undefined : mobileBucketId)}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--ops-brand)] px-3 text-sm font-semibold text-white"
+          >
+            <Plus className="h-4 w-4" /> New ticket
+          </button>
+        </div>
+
+        {loading && mobileTickets.length === 0 ? (
+          Array.from({ length: 3 }).map((_, idx) => (
+            <div key={idx} className="h-36 animate-pulse rounded-lg bg-[var(--ops-surface-subtle)]" />
+          ))
+        ) : mobileTickets.length ? (
+          mobileTickets.map((ticket) => (
+            <MobileTicketRow
+              key={ticket.id}
+              ticket={ticket}
+              buckets={buckets}
+              moving={saving}
+              onOpen={() => openTicket(ticket)}
+              onEdit={() => openEditTicket(ticket)}
+              onMove={(bucketId) => void moveTicket(ticket.id, bucketId)}
+            />
+          ))
+        ) : (
+          <div className="rounded-lg border border-dashed border-[var(--ops-border)] bg-white p-5 text-center text-sm text-[var(--ops-muted)]">
+            No tickets match this view.
+          </div>
+        )}
+      </section>
+
+      <div className="hidden min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-4 py-4 lg:block lg:px-6">
         <DndContext sensors={sensors} onDragEnd={onDragEnd}>
           <div className="flex h-full min-w-max gap-4">
             {buckets.map((bucket) => (
@@ -1080,6 +1135,86 @@ function KpiCard({ label, value, detail, icon: Icon, tone }: KpiCardProps) {
       </div>
       <p className="mt-2 truncate text-xs font-medium">{detail}</p>
     </div>
+  );
+}
+
+function MobileTicketRow({
+  ticket,
+  buckets,
+  moving,
+  onOpen,
+  onEdit,
+  onMove,
+}: {
+  ticket: Ticket;
+  buckets: Bucket[];
+  moving: boolean;
+  onOpen: () => void;
+  onEdit: () => void;
+  onMove: (bucketId: string) => void;
+}) {
+  const color = clientColor(ticket);
+  const agent = agentStatus(ticket);
+  const clientName = ticket.company_display_name || ticket.company_name;
+
+  return (
+    <article className="rounded-lg border border-[var(--ops-border)] border-l-4 bg-white p-3 shadow-[var(--ops-shadow-soft)]" style={{ borderLeftColor: color }}>
+      <button type="button" onClick={onOpen} className="block w-full text-left">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="line-clamp-2 text-base font-semibold leading-6 text-[var(--ops-text)]">{ticket.title}</h2>
+            <p className="mt-1 truncate text-sm text-[var(--ops-muted)]">{clientName}</p>
+          </div>
+          <span className={cn('shrink-0 rounded-full border px-2 py-1 text-xs font-semibold capitalize', priorityClasses[ticket.priority])}>
+            {ticket.priority}
+          </span>
+        </div>
+        {ticket.description ? (
+          <p className="mt-3 line-clamp-2 text-sm leading-5 text-[var(--ops-muted-strong)]">{ticket.description}</p>
+        ) : null}
+        <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+          <span className="rounded-full bg-[var(--ops-surface-subtle)] px-2 py-1 text-[var(--ops-muted-strong)]">{ticket.bucket_name}</span>
+          <span className="rounded-full bg-[var(--ops-surface-subtle)] px-2 py-1 text-[var(--ops-muted-strong)]">{formatDate(ticket.due_date)}</span>
+          {agent ? <span className={cn('rounded-full border px-2 py-1', agent.className)}>{agent.label}</span> : null}
+        </div>
+      </button>
+
+      <div className="mt-3 grid gap-2 border-t border-[var(--ops-border)] pt-3">
+        <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ops-muted)]">
+          Move to
+          <select
+            value={ticket.bucket_id}
+            onChange={(event) => onMove(event.target.value)}
+            disabled={moving}
+            className="h-11 rounded-lg border border-[var(--ops-border)] bg-white px-3 text-sm font-semibold normal-case tracking-normal text-[var(--ops-text)] outline-none disabled:opacity-60"
+          >
+            {buckets.map((bucket) => (
+              <option key={bucket.id} value={bucket.id}>
+                {bucket.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={onOpen}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--ops-border)] bg-[var(--ops-surface)] px-3 text-sm font-semibold text-[var(--ops-text)]"
+          >
+            <MessageSquareText className="h-4 w-4" />
+            Open
+          </button>
+          <button
+            type="button"
+            onClick={onEdit}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--ops-border)] bg-[var(--ops-surface)] px-3 text-sm font-semibold text-[var(--ops-text)]"
+          >
+            <Pencil className="h-4 w-4" />
+            Edit
+          </button>
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -1332,9 +1467,9 @@ function TicketWorkspaceModal({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/25 p-3 backdrop-blur-sm sm:p-5">
-      <section className="flex h-[min(52rem,calc(100vh-1.5rem))] w-full max-w-[82rem] flex-col overflow-hidden rounded-lg border border-[var(--ops-border-strong)] bg-[var(--ops-surface)] shadow-[0_26px_80px_-44px_rgba(8,18,35,0.72)] sm:h-[min(52rem,calc(100vh-2.5rem))]">
-        <div className="flex items-start justify-between gap-4 border-b border-[var(--ops-border)] px-4 py-3 sm:px-5">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-stretch bg-slate-950/25 p-0 backdrop-blur-sm sm:items-center sm:justify-center sm:p-5">
+      <section className="flex h-[100dvh] w-full max-w-[82rem] flex-col overflow-hidden rounded-none border border-[var(--ops-border-strong)] bg-[var(--ops-surface)] shadow-[0_26px_80px_-44px_rgba(8,18,35,0.72)] sm:h-[min(52rem,calc(100dvh-2.5rem))] sm:rounded-lg">
+        <div className="flex flex-col gap-3 border-b border-[var(--ops-border)] px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:flex-row sm:items-start sm:justify-between sm:px-5 sm:pt-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className={cn('rounded-full border px-2 py-1 text-[10px] font-semibold uppercase', priorityClasses[ticket.priority] ?? priorityClasses.normal)}>
@@ -1354,7 +1489,7 @@ function TicketWorkspaceModal({
               {ticket.company_display_name || ticket.company_name} · Updated {formatDateTime(ticket.updated_at)}
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             {isEditing ? (
               <>
                 <button
@@ -1401,7 +1536,7 @@ function TicketWorkspaceModal({
         </div>
 
         <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(20rem,0.78fr)_minmax(0,1.22fr)]">
-          <aside className="min-h-0 overflow-y-auto border-b border-[var(--ops-border)] bg-[var(--ops-surface)] px-4 py-4 lg:border-b-0 lg:border-r sm:px-5">
+          <aside className="max-h-[40dvh] min-h-0 overflow-y-auto border-b border-[var(--ops-border)] bg-[var(--ops-surface)] px-4 py-4 lg:max-h-none lg:border-b-0 lg:border-r sm:px-5">
             {draft ? (
               <form
                 className="space-y-4"
@@ -1612,7 +1747,7 @@ function TicketWorkspaceModal({
             </div>
 
             {panel === 'conversation' ? (
-              <div className="border-t border-[var(--ops-border)] bg-[var(--ops-surface)] px-4 py-3 sm:px-5">
+              <div className="border-t border-[var(--ops-border)] bg-[var(--ops-surface)] px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-5">
                 <textarea
                   value={commentBody}
                   onChange={(event) => onCommentBodyChange(event.target.value.slice(0, 4000))}
@@ -1764,14 +1899,14 @@ function DetailPill({ label, value, icon }: { label: string; value: string; icon
 function SidePanel({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/30">
-      <div className="absolute right-0 top-0 h-full w-full max-w-xl overflow-y-auto bg-[var(--ops-surface)] shadow-2xl">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--ops-border)] bg-[var(--ops-surface)] px-5 py-4">
+      <div className="absolute right-0 top-0 h-[100dvh] w-full max-w-xl overflow-y-auto bg-[var(--ops-surface)] shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--ops-border)] bg-[var(--ops-surface)] px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
           <h2 className="text-lg font-semibold text-[var(--ops-text)]">{title}</h2>
           <button type="button" onClick={onClose} className="rounded-lg p-2 text-[var(--ops-muted)] hover:bg-[var(--ops-surface-subtle)]">
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="p-5">{children}</div>
+        <div className="px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5">{children}</div>
       </div>
     </div>
   );

@@ -1,29 +1,66 @@
 import type { MetadataRoute } from 'next';
 
-function siteUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
-    process.env.NEXT_PUBLIC_APP_BASE_URL?.trim() ||
-    process.env.APP_BASE_URL?.trim() ||
-    'http://localhost:3005'
-  );
-}
-
 export default function manifest(): MetadataRoute.Manifest {
-  const base = siteUrl();
   return {
     name: 'WNY Automation Admin',
     short_name: 'WNY Admin',
-    description: 'The private WNY Automation command station.',
+    description: 'The private WNY Automation command station for tickets, portals, staging, and operations.',
     start_url: '/admin',
+    scope: '/',
     display: 'standalone',
-    background_color: '#0b1422',
-    theme_color: '#0e1a2b',
+    orientation: 'portrait',
+    background_color: '#f3f5f1',
+    theme_color: '#10251d',
+    categories: ['business', 'productivity'],
     icons: [
       {
-        src: `${base}/icon.svg`,
+        src: '/assets/pwa-icon-192.png',
+        sizes: '192x192',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
+        src: '/assets/pwa-icon-192.png',
+        sizes: '192x192',
+        type: 'image/png',
+        purpose: 'maskable',
+      },
+      {
+        src: '/assets/pwa-icon-512.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
+        src: '/assets/pwa-icon-512.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'maskable',
+      },
+      {
+        src: '/icon.svg',
         sizes: 'any',
         type: 'image/svg+xml',
+      },
+    ],
+    shortcuts: [
+      {
+        name: 'Tickets',
+        short_name: 'Tickets',
+        url: '/admin',
+        description: 'Open the admin ticket board.',
+      },
+      {
+        name: 'Staging',
+        short_name: 'Staging',
+        url: '/admin/staging',
+        description: 'Open staging status.',
+      },
+      {
+        name: 'Webhook Failures',
+        short_name: 'Webhooks',
+        url: '/admin/webhook-failures',
+        description: 'Review webhook failures.',
       },
     ],
   };
